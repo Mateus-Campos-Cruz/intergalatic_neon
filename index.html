@@ -36,7 +36,7 @@
 
     #audioNotice {
       position: absolute;
-      bottom: 15px;
+      bottom: 40px;
       left: 50%;
       transform: translateX(-50%);
       font-size: 10px;
@@ -47,11 +47,27 @@
       letter-spacing: 1px;
       text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
     }
+
+    #footerNotice {
+      position: absolute;
+      bottom: 15px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.35);
+      pointer-events: none;
+      z-index: 10;
+      text-align: center;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      text-shadow: 0 0 5px rgba(0, 255, 255, 0.2);
+    }
   </style>
 </head>
 <body>
   <canvas id="gameCanvas"></canvas>
   <div id="audioNotice">CLIQUE OU TOQUE NA TELA PARA ATIVAR O SOM SINTETIZADO</div>
+  <div id="footerNotice">Criado por Mateus Cruz</div>
 
   <script>
     // --- UTILS & CORE SETTINGS ---
