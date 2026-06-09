@@ -356,6 +356,32 @@
           osc.stop(startTime + 0.45);
         });
       }
+
+      playPowerUp() {
+        if (!this.initialized) return;
+        this.resume();
+        const now = this.ctx.currentTime;
+        const chord = [330, 440, 554.37, 659.25, 880]; // Ascending chime
+
+        chord.forEach((freq, idx) => {
+          const startTime = now + idx * 0.06;
+          const osc = this.ctx.createOscillator();
+          const gainNode = this.ctx.createGain();
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, startTime);
+
+          gainNode.gain.setValueAtTime(0, startTime);
+          gainNode.gain.linearRampToValueAtTime(0.15, startTime + 0.03);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + 0.25);
+
+          osc.connect(gainNode);
+          gainNode.connect(this.masterGain);
+
+          osc.start(startTime);
+          osc.stop(startTime + 0.25);
+        });
+      }
     }
 
     const audioEngine = new AudioEngine();
@@ -484,29 +510,44 @@
 
     // --- BULLETS & PARTICLES ---
     class Bullet {
-      constructor(x, y, isEnemy) {
+      constructor(x, y, isEnemy, weaponLevel = 1, angle = 0) {
         this.x = x;
         this.y = y;
         this.isEnemy = isEnemy;
+        this.weaponLevel = weaponLevel;
+        this.angle = angle; // support spread angles
         this.speed = isEnemy ? 280 : 650;
         this.width = isEnemy ? 8 : 4;
         this.height = isEnemy ? 8 : 16;
+        
+        // Scale bullet dimensions by level
+        if (!isEnemy) {
+          if (weaponLevel === 2) {
+            this.width = 6;
+            this.height = 16;
+          } else if (weaponLevel === 3) {
+            this.width = 8;
+            this.height = 20;
+          }
+        }
+        
         this.active = true;
         this.trail = [];
       }
 
       update(dt) {
-        // Keep trail of points for glow effects
         this.trail.push({ x: this.x, y: this.y });
         if (this.trail.length > 5) this.trail.shift();
 
         if (this.isEnemy) {
           this.y += this.speed * dt;
         } else {
-          this.y -= this.speed * dt;
+          // Adjust trajectory according to shoot angle
+          this.y -= this.speed * Math.cos(this.angle) * dt;
+          this.x += this.speed * Math.sin(this.angle) * dt;
         }
 
-        if (this.y < -30 || this.y > V_HEIGHT + 30) {
+        if (this.y < -30 || this.y > V_HEIGHT + 30 || this.x < -30 || this.x > V_WIDTH + 30) {
           this.active = false;
         }
       }
@@ -535,15 +576,30 @@
           ctx.arc(this.x, this.y, 4, 0, Math.PI * 2);
           ctx.fill();
         } else {
-          // Thin cyber laser
+          // Player Bullet (Modified by weaponLevel)
+          let color = '#00ffff';
+          let glow = '#00ffff';
+
+          if (this.weaponLevel === 2) {
+            color = '#ff00ff';
+            glow = '#ff00ff';
+          } else if (this.weaponLevel === 3) {
+            color = '#ffaa00';
+            glow = '#ffd700';
+          }
+
           ctx.shadowBlur = 12;
-          ctx.shadowColor = '#00ffff';
-          ctx.fillStyle = '#00ffff';
-          ctx.fillRect(this.x - this.width / 2, this.y - this.height / 2, this.width, this.height);
+          ctx.shadowColor = glow;
+          ctx.fillStyle = color;
+          
+          ctx.translate(this.x, this.y);
+          ctx.rotate(this.angle);
+          
+          ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
 
           // Bright inner core
           ctx.fillStyle = '#ffffff';
-          ctx.fillRect(this.x - this.width / 4, this.y - this.height / 2, this.width / 2, this.height);
+          ctx.fillRect(-this.width / 4, -this.height / 2, this.width / 2, this.height);
         }
         ctx.restore();
       }
@@ -584,6 +640,59 @@
       }
     }
 
+    class PowerUp {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.width = 20;
+        this.height = 20;
+        this.speed = 95;
+        this.active = true;
+        this.pulseTime = Math.random() * 100;
+      }
+
+      update(dt) {
+        this.y += this.speed * dt;
+        this.pulseTime += dt * 8;
+        if (this.y > V_HEIGHT + 30) {
+          this.active = false;
+        }
+      }
+
+      draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        const size = this.width / 2;
+        const pulse = 1.0 + Math.sin(this.pulseTime) * 0.15;
+        ctx.scale(pulse, pulse);
+
+        // Yellow powerup diamond with rotating outer borders
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#ffd700';
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 2;
+        ctx.fillStyle = 'rgba(255, 215, 0, 0.2)';
+
+        ctx.beginPath();
+        ctx.moveTo(0, -size);
+        ctx.lineTo(size, 0);
+        ctx.lineTo(0, size);
+        ctx.lineTo(-size, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = 'bold 9px "Orbitron", monospace';
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowBlur = 0;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('W', 0, 0);
+
+        ctx.restore();
+      }
+    }
+
     // --- PLAYER SHIP ---
     class Player {
       constructor() {
@@ -598,6 +707,7 @@
         this.shootTimer = 0;
         this.shootCooldown = 0.3; // 300ms
         this.speed = 10; // interpolation rate
+        this.weaponLevel = 1; // 1 (Default), 2 (Triple), 3 (Quad Heavy)
       }
 
       reset() {
@@ -608,6 +718,7 @@
         this.invulnerable = false;
         this.invulnerableTimer = 0;
         this.shootTimer = 0;
+        this.weaponLevel = 1;
       }
 
       triggerDamage() {
@@ -643,9 +754,24 @@
           this.shootTimer += dt;
           if (this.shootTimer >= this.shootCooldown) {
             this.shootTimer = 0;
-            // Spawn twin parallel lasers
-            bullets.push(new Bullet(this.x - 10, this.y - 12, false));
-            bullets.push(new Bullet(this.x + 10, this.y - 12, false));
+            
+            // Firing patterns depending on weaponLevel
+            if (this.weaponLevel === 1) {
+              // Level 1: 2 parallel lasers (cyan)
+              bullets.push(new Bullet(this.x - 10, this.y - 12, false, 1));
+              bullets.push(new Bullet(this.x + 10, this.y - 12, false, 1));
+            } else if (this.weaponLevel === 2) {
+              // Level 2: 3 spread lasers (magenta)
+              bullets.push(new Bullet(this.x, this.y - 12, false, 2, 0)); // straight
+              bullets.push(new Bullet(this.x - 12, this.y - 10, false, 2, -0.15)); // left angled
+              bullets.push(new Bullet(this.x + 12, this.y - 10, false, 2, 0.15)); // right angled
+            } else {
+              // Level 3: 4 spread heavy lasers (gold/orange)
+              bullets.push(new Bullet(this.x - 8, this.y - 14, false, 3, 0)); // straight-left
+              bullets.push(new Bullet(this.x + 8, this.y - 14, false, 3, 0)); // straight-right
+              bullets.push(new Bullet(this.x - 18, this.y - 10, false, 3, -0.28)); // left-wide angled
+              bullets.push(new Bullet(this.x + 18, this.y - 10, false, 3, 0.28)); // right-wide angled
+            }
             audioEngine.playPlayerShoot();
           }
         }
@@ -664,13 +790,23 @@
         const w = this.width;
         const h = this.height;
 
-        // 1. Engine flame
+        // 1. Engine flame (colors match weapon level)
         if (Math.random() > 0.15) {
           ctx.beginPath();
           let flameGrad = ctx.createLinearGradient(0, h / 2 - 2, 0, h / 2 + 16 + Math.random() * 12);
-          flameGrad.addColorStop(0, '#00ffff');
-          flameGrad.addColorStop(0.4, '#0088ff');
+          
+          if (this.weaponLevel === 1) {
+            flameGrad.addColorStop(0, '#00ffff');
+            flameGrad.addColorStop(0.4, '#0088ff');
+          } else if (this.weaponLevel === 2) {
+            flameGrad.addColorStop(0, '#ff00ff');
+            flameGrad.addColorStop(0.4, '#8800ff');
+          } else {
+            flameGrad.addColorStop(0, '#ffd700');
+            flameGrad.addColorStop(0.4, '#ff5500');
+          }
           flameGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+          
           ctx.fillStyle = flameGrad;
           ctx.moveTo(-5, h / 2 - 4);
           ctx.lineTo(5, h / 2 - 4);
@@ -679,38 +815,143 @@
           ctx.fill();
         }
 
-        // Base glow styling
+        // Color configurations based on weapon level
+        let mainColor = '#00ffff';
+        let wingColor = '#39ff14';
+        let glowColor = '#00ffff';
+
+        if (this.weaponLevel === 2) {
+          mainColor = '#ff00ff';
+          wingColor = '#00ffff';
+          glowColor = '#ff00ff';
+        } else if (this.weaponLevel === 3) {
+          mainColor = '#ff5500';
+          wingColor = '#ffd700';
+          glowColor = '#ffd700';
+        }
+
         ctx.shadowBlur = 12;
-        ctx.shadowColor = '#00ffff';
+        ctx.shadowColor = glowColor;
 
-        // 2. Left side wing detail (green)
-        ctx.fillStyle = '#39ff14';
-        ctx.beginPath();
-        ctx.moveTo(0, -h / 2);
-        ctx.quadraticCurveTo(-w / 3, h / 6, -w / 2, h / 2);
-        ctx.quadraticCurveTo(-w / 4, h / 3, 0, h / 4);
-        ctx.closePath();
-        ctx.fill();
+        // Draw player ship designs (Shape changes dynamically with weapon levels)
+        if (this.weaponLevel === 1) {
+          // Level 1: Traditional triangular ship
+          ctx.fillStyle = wingColor;
+          ctx.beginPath();
+          ctx.moveTo(0, -h / 2);
+          ctx.quadraticCurveTo(-w / 3, h / 6, -w / 2, h / 2);
+          ctx.quadraticCurveTo(-w / 4, h / 3, 0, h / 4);
+          ctx.closePath();
+          ctx.fill();
 
-        // 3. Right side wing detail (green)
-        ctx.beginPath();
-        ctx.moveTo(0, -h / 2);
-        ctx.quadraticCurveTo(w / 3, h / 6, w / 2, h / 2);
-        ctx.quadraticCurveTo(w / 4, h / 3, 0, h / 4);
-        ctx.closePath();
-        ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(0, -h / 2);
+          ctx.quadraticCurveTo(w / 3, h / 6, w / 2, h / 2);
+          ctx.quadraticCurveTo(w / 4, h / 3, 0, h / 4);
+          ctx.closePath();
+          ctx.fill();
 
-        // 4. Main triangular hull (cyan)
-        ctx.fillStyle = '#00ffff';
-        ctx.beginPath();
-        ctx.moveTo(0, -h / 2);
-        ctx.lineTo(-w / 3, h / 2.5);
-        ctx.lineTo(w / 3, h / 2.5);
-        ctx.closePath();
-        ctx.fill();
+          ctx.fillStyle = mainColor;
+          ctx.beginPath();
+          ctx.moveTo(0, -h / 2);
+          ctx.lineTo(-w / 3, h / 2.5);
+          ctx.lineTo(w / 3, h / 2.5);
+          ctx.closePath();
+          ctx.fill();
 
-        // 5. Translucent Cockpit
-        ctx.fillStyle = 'rgba(130, 225, 255, 0.75)';
+        } else if (this.weaponLevel === 2) {
+          // Level 2: Hexagonal wing extension style
+          ctx.fillStyle = wingColor;
+          ctx.beginPath();
+          ctx.moveTo(-w / 4, -h / 4);
+          ctx.lineTo(-w * 0.6, h / 3);
+          ctx.lineTo(-w / 3, h / 2);
+          ctx.closePath();
+          ctx.fill();
+          
+          ctx.beginPath();
+          ctx.moveTo(w / 4, -h / 4);
+          ctx.lineTo(w * 0.6, h / 3);
+          ctx.lineTo(w / 3, h / 2);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.fillStyle = wingColor;
+          ctx.beginPath();
+          ctx.moveTo(0, -h / 2);
+          ctx.lineTo(-w / 2, h / 3);
+          ctx.lineTo(0, h / 5);
+          ctx.closePath();
+          ctx.fill();
+          
+          ctx.beginPath();
+          ctx.moveTo(0, -h / 2);
+          ctx.lineTo(w / 2, h / 3);
+          ctx.lineTo(0, h / 5);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.fillStyle = mainColor;
+          ctx.beginPath();
+          ctx.moveTo(0, -h / 2 - 4);
+          ctx.lineTo(-w / 3, h / 3);
+          ctx.lineTo(-w / 6, h / 2);
+          ctx.lineTo(w / 6, h / 2);
+          ctx.lineTo(w / 3, h / 3);
+          ctx.closePath();
+          ctx.fill();
+
+        } else {
+          // Level 3: Crescent-winged forward horns style
+          ctx.fillStyle = wingColor;
+          ctx.beginPath();
+          ctx.moveTo(-w / 6, -h / 3);
+          ctx.lineTo(-w * 0.7, h / 3);
+          ctx.lineTo(-w * 0.5, h / 2);
+          ctx.lineTo(-w / 3, h / 3);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.moveTo(w / 6, -h / 3);
+          ctx.lineTo(w * 0.7, h / 3);
+          ctx.lineTo(w * 0.5, h / 2);
+          ctx.lineTo(w / 3, h / 3);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.fillStyle = mainColor;
+          ctx.beginPath();
+          ctx.moveTo(-w / 4, h / 4);
+          ctx.lineTo(-w / 3, -h / 2);
+          ctx.lineTo(-w / 6, -h / 4);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.moveTo(w / 4, h / 4);
+          ctx.lineTo(w / 3, -h / 2);
+          ctx.lineTo(w / 6, -h / 4);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.fillStyle = mainColor;
+          ctx.beginPath();
+          ctx.moveTo(0, -h / 2 - 8);
+          ctx.lineTo(-w / 4, h / 3);
+          ctx.lineTo(w / 4, h / 3);
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        // 5. Cockpit
+        if (this.weaponLevel === 1) {
+          ctx.fillStyle = 'rgba(130, 225, 255, 0.75)';
+        } else if (this.weaponLevel === 2) {
+          ctx.fillStyle = 'rgba(255, 130, 225, 0.75)';
+        } else {
+          ctx.fillStyle = 'rgba(255, 225, 130, 0.85)';
+        }
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -723,11 +964,11 @@
 
         // 6. Shield outline ring
         if (this.invulnerable) {
-          ctx.shadowColor = '#00ffff';
-          ctx.strokeStyle = `rgba(0, 255, 255, ${0.4 + Math.sin(tick * 0.25) * 0.35})`;
-          ctx.lineWidth = 2;
+          ctx.shadowColor = glowColor;
+          ctx.strokeStyle = `rgba(${this.weaponLevel === 1 ? '0, 255, 255' : (this.weaponLevel === 2 ? '255, 0, 255' : '255, 215, 0')}, ${0.4 + Math.sin(tick * 0.25) * 0.35})`;
+          ctx.lineWidth = 2.5;
           ctx.beginPath();
-          ctx.arc(0, 0, w * 0.8, 0, Math.PI * 2);
+          ctx.arc(0, 0, w * 0.95, 0, Math.PI * 2);
           ctx.stroke();
         }
 
@@ -926,8 +1167,8 @@
       constructor() {
         this.currentWave = 1;
         this.state = 'TRANSITION'; // TRANSITION, PLAYING, FINISHED
-        this.transitionDuration = 1.5; // Shortened transition time (1.5s)
-        this.transitionTimer = 1.5;
+        this.transitionDuration = 3.5; // Increased transition time (3.5s) as requested
+        this.transitionTimer = 3.5;
         
         this.spawnQueue = [];
         this.spawnTimer = 0;
@@ -950,20 +1191,23 @@
         let total = 0;
         let types = [];
         
+        // Scale enemy HP as waves progress
+        let hpIncrease = Math.floor((waveNum - 1) / 3); // +1 HP every 3 waves
+
         // Define wave configurations according to standard rules
         if (waveNum <= 3) {
           total = 5 + waveNum * 2; // W1: 7, W2: 9, W3: 11
           for (let i = 0; i < total; i++) {
-            types.push({ type: 'A', hp: 1 });
+            types.push({ type: 'A', hp: 1 + hpIncrease });
           }
           this.spawnInterval = 0.35; // Spawns faster
         } else if (waveNum <= 6) {
           total = 8 + waveNum; // W4: 12, W5: 13, W6: 14
           for (let i = 0; i < total; i++) {
             if (Math.random() < 0.45) {
-              types.push({ type: 'B', hp: Math.random() < 0.5 ? 1 : 2 });
+              types.push({ type: 'B', hp: (Math.random() < 0.5 ? 1 : 2) + hpIncrease });
             } else {
-              types.push({ type: 'A', hp: 1 });
+              types.push({ type: 'A', hp: 1 + hpIncrease });
             }
           }
           this.spawnInterval = 0.28; // Spawns faster
@@ -972,11 +1216,11 @@
           for (let i = 0; i < total; i++) {
             let r = Math.random();
             if (r < 0.3) {
-              types.push({ type: 'C', hp: Math.random() < 0.5 ? 2 : 4 });
+              types.push({ type: 'C', hp: (Math.random() < 0.5 ? 2 : 4) + hpIncrease });
             } else if (r < 0.65) {
-              types.push({ type: 'B', hp: Math.random() < 0.5 ? 2 : 3 });
+              types.push({ type: 'B', hp: (Math.random() < 0.5 ? 2 : 3) + hpIncrease });
             } else {
-              types.push({ type: 'A', hp: 2 });
+              types.push({ type: 'A', hp: 2 + hpIncrease });
             }
           }
           this.spawnInterval = 0.22; // Spawns faster
@@ -1046,6 +1290,7 @@
     let enemies = [];
     let bullets = [];
     let particles = [];
+    let powerups = [];
     let waveTime = 0;
     let pointsTimer = 0;
 
@@ -1066,6 +1311,7 @@
       enemies = [];
       bullets = [];
       particles = [];
+      powerups = [];
       waveTime = 0;
       pointsTimer = 0;
       player.reset();
@@ -1334,6 +1580,12 @@
                 score += enemy.scoreValue;
                 waveManager.enemiesDestroyed++;
 
+                // Collectible items spawned on even waves (onda sim, onda não)
+                const isEvenWave = (waveManager.currentWave % 2 === 0);
+                if (isEvenWave && Math.random() < 0.22) { // 22% chance of drop
+                  powerups.push(new PowerUp(enemy.x, enemy.y));
+                }
+
                 // Spawn explosion particles
                 for (let i = 0; i < 12; i++) {
                   particles.push(new Particle(enemy.x, enemy.y, enemy.color));
@@ -1375,6 +1627,13 @@
             enemy.active = false;
             waveManager.enemiesDestroyed++;
             audioEngine.playEnemyExplosion();
+
+            // Collectible items spawned on even waves (onda sim, onda não)
+            const isEvenWave = (waveManager.currentWave % 2 === 0);
+            if (isEvenWave && Math.random() < 0.22) {
+              powerups.push(new PowerUp(enemy.x, enemy.y));
+            }
+
             for (let i = 0; i < 12; i++) {
               particles.push(new Particle(enemy.x, enemy.y, enemy.color));
             }
@@ -1395,6 +1654,24 @@
               audioEngine.playWaveClear();
               waveManager.startWave(waveManager.currentWave + 1);
             }
+          }
+        }
+      }
+
+      // 3. Player overlap with collectible powerups
+      if (gameState === 'PLAYING') {
+        for (let i = powerups.length - 1; i >= 0; i--) {
+          const pu = powerups[i];
+          const dist = Math.hypot(player.x - pu.x, player.y - pu.y);
+          const colLimit = (player.width / 2) + (pu.width / 2);
+          
+          if (dist < colLimit) {
+            pu.active = false;
+            if (player.weaponLevel < 3) {
+              player.weaponLevel++;
+              audioEngine.playPowerUp();
+            }
+            score += 15;
           }
         }
       }
@@ -1457,16 +1734,19 @@
 
         bullets.forEach(b => b.update(dt));
         particles.forEach(p => p.update(dt));
+        powerups.forEach(pu => pu.update(dt));
 
         // 2. Resolve collisions
         checkCollisions();
 
-        // Cleanup dead particles
+        // Cleanup dead particles and powerups
         particles = particles.filter(p => p.life > 0);
+        powerups = powerups.filter(pu => pu.active);
 
         // 3. Render entities
         enemies.forEach(e => e.draw(ctx));
         bullets.forEach(b => b.draw(ctx));
+        powerups.forEach(pu => pu.draw(ctx));
         particles.forEach(p => p.draw(ctx));
         player.draw(ctx);
 
