@@ -1738,6 +1738,13 @@
         this.enemiesDestroyed = 0;
         this.waveDamageTaken = false;
 
+        // Tag all currently active enemies as leftover so they do not count towards the new wave count
+        if (typeof enemies !== 'undefined') {
+          enemies.forEach(e => {
+            e.isLeftover = true;
+          });
+        }
+
         let total = 0;
         let types = [];
         
@@ -1746,17 +1753,17 @@
 
         if (waveNum === 10) {
           this.enemiesTotal = 1;
-          this.spawnQueue.push({ type: 'BOSS1', hp: 50, x: V_WIDTH / 2, y: -60 });
+          this.spawnQueue.push({ type: 'BOSS1', hp: 1500, x: V_WIDTH / 2, y: -60 });
           this.spawnInterval = 0.5;
           return;
         } else if (waveNum === 20) {
           this.enemiesTotal = 1;
-          this.spawnQueue.push({ type: 'BOSS2', hp: 100, x: V_WIDTH / 2, y: -60 });
+          this.spawnQueue.push({ type: 'BOSS2', hp: 3000, x: V_WIDTH / 2, y: -60 });
           this.spawnInterval = 0.5;
           return;
         } else if (waveNum === 30) {
           this.enemiesTotal = 1;
-          this.spawnQueue.push({ type: 'BOSS3', hp: 200, x: V_WIDTH / 2, y: -60 });
+          this.spawnQueue.push({ type: 'BOSS3', hp: 6000, x: V_WIDTH / 2, y: -60 });
           this.spawnInterval = 0.5;
           return;
         }
@@ -2241,6 +2248,27 @@
     }
 
     // --- GAME ENGINE PROCESSORS ---
+    function triggerWaveClear() {
+      // Perfect Wave Bonus Check
+      if (!waveManager.waveDamageTaken) {
+        score += 100;
+        // Trigger visual celebration indicator
+        for (let p = 0; p < 25; p++) {
+          particles.push(new Particle(V_WIDTH / 2, V_HEIGHT / 2, '#39ff14'));
+        }
+      }
+      audioEngine.playWaveClear();
+      if (waveManager.currentWave >= 30) {
+        gameState = 'VICTORY';
+        if (score > highscore) {
+          highscore = score;
+          localStorage.setItem('intergalactic_neon_highscore', highscore.toString());
+        }
+      } else {
+        waveManager.startWave(waveManager.currentWave + 1);
+      }
+    }
+
     function checkCollisions() {
       // 1. Bullet colliders
       for (let b = bullets.length - 1; b >= 0; b--) {
@@ -2280,9 +2308,12 @@
               if (destroyed) {
                 audioEngine.playEnemyExplosion();
                 score += enemy.scoreValue;
-                waveManager.enemiesDestroyed++;
 
                 const isBossWave = (waveManager.currentWave === 10 || waveManager.currentWave === 20 || waveManager.currentWave === 30);
+                if (!enemy.isLeftover && !isBossWave) {
+                  waveManager.enemiesDestroyed++;
+                }
+
                 if (enemy.guaranteedDrop) {
                   powerups.push(new PowerUp(enemy.x, enemy.y, enemy.guaranteedDrop));
                 } else if (!isBossWave) {
@@ -2312,36 +2343,7 @@
                 }
 
                 if (waveCleared) {
-                  // Destroy remaining enemies
-                  enemies.forEach(otherEnemy => {
-                    if (otherEnemy !== enemy) {
-                      otherEnemy.active = false;
-                      for (let i = 0; i < 8; i++) {
-                        particles.push(new Particle(otherEnemy.x, otherEnemy.y, otherEnemy.color));
-                      }
-                    }
-                  });
-                  // Clear enemy bullets
-                  bullets = bullets.filter(b => !b.isEnemy);
-
-                  // Perfect Wave Bonus Check
-                  if (!waveManager.waveDamageTaken) {
-                    score += 100;
-                    // Trigger visual celebration indicator
-                    for (let p = 0; p < 25; p++) {
-                      particles.push(new Particle(V_WIDTH / 2, V_HEIGHT / 2, '#39ff14'));
-                    }
-                  }
-                  audioEngine.playWaveClear();
-                  if (waveManager.currentWave >= 30) {
-                    gameState = 'VICTORY';
-                    if (score > highscore) {
-                      highscore = score;
-                      localStorage.setItem('intergalactic_neon_highscore', highscore.toString());
-                    }
-                  } else {
-                    waveManager.startWave(waveManager.currentWave + 1);
-                  }
+                  triggerWaveClear();
                 }
               }
               break;
@@ -2375,6 +2377,10 @@
             audioEngine.playEnemyExplosion();
 
             const isBossWave = (waveManager.currentWave === 10 || waveManager.currentWave === 20 || waveManager.currentWave === 30);
+            if (!enemy.isLeftover && !isBossWave) {
+              waveManager.enemiesDestroyed++;
+            }
+
             if (enemy.guaranteedDrop) {
               powerups.push(new PowerUp(enemy.x, enemy.y, enemy.guaranteedDrop));
             } else if (!isBossWave) {
@@ -2408,32 +2414,7 @@
             }
 
             if (waveCleared) {
-              enemies.forEach(otherEnemy => {
-                if (otherEnemy !== enemy) {
-                  otherEnemy.active = false;
-                  for (let i = 0; i < 8; i++) {
-                    particles.push(new Particle(otherEnemy.x, otherEnemy.y, otherEnemy.color));
-                  }
-                }
-              });
-              bullets = bullets.filter(b => !b.isEnemy);
-
-              if (!waveManager.waveDamageTaken) {
-                score += 100;
-                for (let p = 0; p < 25; p++) {
-                  particles.push(new Particle(V_WIDTH / 2, V_HEIGHT / 2, '#39ff14'));
-                }
-              }
-              audioEngine.playWaveClear();
-              if (waveManager.currentWave >= 30) {
-                gameState = 'VICTORY';
-                if (score > highscore) {
-                  highscore = score;
-                  localStorage.setItem('intergalactic_neon_highscore', highscore.toString());
-                }
-              } else {
-                waveManager.startWave(waveManager.currentWave + 1);
-              }
+              triggerWaveClear();
             }
           }
         }
@@ -2458,6 +2439,19 @@
               audioEngine.playPowerUp();
             }
             score += 15;
+          }
+        }
+      }
+
+      // 4. Wave Completion Failsafe (normal waves only)
+      if (gameState === 'PLAYING' && waveManager.state === 'PLAYING') {
+        const isBossWave = (waveManager.currentWave === 10 || waveManager.currentWave === 20 || waveManager.currentWave === 30);
+        if (!isBossWave) {
+          if (waveManager.spawnQueue.length === 0) {
+            const activeWaveEnemies = enemies.filter(e => !e.isLeftover && !e.type.startsWith('BOSS'));
+            if (activeWaveEnemies.length === 0) {
+              triggerWaveClear();
+            }
           }
         }
       }
