@@ -1020,9 +1020,9 @@
       constructor(x, y, type = 'WEAPON') {
         this.x = x;
         this.y = y;
-        this.type = type; // 'WEAPON', 'SHIELD', or 'MEDKIT'
-        this.width = type === 'MEDKIT' ? 28 : 20;
-        this.height = type === 'MEDKIT' ? 28 : 20;
+        this.type = type; // 'WEAPON', 'SHIELD', 'MEDKIT', or 'MISSILE_KIT'
+        this.width = (type === 'MEDKIT' || type === 'MISSILE_KIT') ? 28 : 20;
+        this.height = (type === 'MEDKIT' || type === 'MISSILE_KIT') ? 28 : 20;
         this.speed = type === 'MEDKIT' ? 70 : 95; // MEDKIT falls slower so player can catch it
         this.active = true;
         this.pulseTime = Math.random() * 100;
@@ -1116,13 +1116,226 @@
           ctx.shadowBlur = 0;
           ctx.fillRect(-thick * 0.5, -arm * 0.7, thick, arm * 1.4);
           ctx.fillRect(-arm * 0.7, -thick * 0.5, arm * 1.4, thick);
+        } else if (this.type === 'MISSILE_KIT') {
+          // Purple glowing missile icon — homing missile powerup
+          ctx.shadowBlur = 22;
+          ctx.shadowColor = '#bd00ff';
+          ctx.strokeStyle = '#bd00ff';
+          ctx.lineWidth = 2;
+          ctx.fillStyle = 'rgba(189, 0, 255, 0.18)';
+
+          // Pentagon border
+          ctx.beginPath();
+          for (let i = 0; i < 5; i++) {
+            const angle = i * (Math.PI * 2 / 5) - Math.PI / 2;
+            ctx.lineTo(Math.cos(angle) * size, Math.sin(angle) * size);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // Missile silhouette inside
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowBlur = 6;
+          ctx.shadowColor = '#bd00ff';
+          // Body
+          ctx.fillRect(-size * 0.12, -size * 0.45, size * 0.24, size * 0.65);
+          // Nose tip
+          ctx.beginPath();
+          ctx.moveTo(0, -size * 0.55);
+          ctx.lineTo(-size * 0.12, -size * 0.35);
+          ctx.lineTo(size * 0.12, -size * 0.35);
+          ctx.closePath();
+          ctx.fill();
+          // Fins
+          ctx.fillStyle = '#ff00ff';
+          ctx.beginPath();
+          ctx.moveTo(-size * 0.12, size * 0.15);
+          ctx.lineTo(-size * 0.3, size * 0.35);
+          ctx.lineTo(-size * 0.12, size * 0.22);
+          ctx.closePath();
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(size * 0.12, size * 0.15);
+          ctx.lineTo(size * 0.3, size * 0.35);
+          ctx.lineTo(size * 0.12, size * 0.22);
+          ctx.closePath();
+          ctx.fill();
         }
 
         ctx.restore();
       }
     }
 
-    // --- PLAYER SHIP ---
+    // --- PLAYER HOMING MISSILE ---
+    class PlayerMissile {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = 0;
+        this.vy = -120; // initial upward nudge toward enemies
+        this.speed = 300;
+        this.damage = 2.0;   // 2x a normal bullet at level 1
+        this.blastRadius = 50;
+        this.life = 4.0;
+        this.active = true;
+        this.trail = [];
+        this.width = 12;
+        this.height = 12;
+        this.angle = -Math.PI / 2;
+      }
+
+      _nearestEnemy() {
+        let best = null;
+        let bestDist = Infinity;
+        enemies.forEach(e => {
+          if (!e.active) return;
+          const d = Math.hypot(e.x - this.x, e.y - this.y);
+          if (d < bestDist) { bestDist = d; best = e; }
+        });
+        return best;
+      }
+
+      update(dt) {
+        this.life -= dt;
+        if (this.life <= 0 || enemies.length === 0) {
+          this.explode();
+          return;
+        }
+
+        const target = this._nearestEnemy();
+        if (target) {
+          const dx = target.x - this.x;
+          const dy = target.y - this.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          const tx = (dx / dist) * this.speed;
+          const ty = (dy / dist) * this.speed;
+          const turn = 5.0;
+          this.vx += (tx - this.vx) * turn * dt;
+          this.vy += (ty - this.vy) * turn * dt;
+        }
+
+        this.trail.push({ x: this.x, y: this.y });
+        if (this.trail.length > 10) this.trail.shift();
+
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.angle = Math.atan2(this.vy, this.vx);
+
+        // Hit detection — explode on first enemy contact
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          const e = enemies[i];
+          if (!e.active) continue;
+          const d = Math.hypot(e.x - this.x, e.y - this.y);
+          if (d < (e.width / 2) + 8) {
+            this.explode();
+            return;
+          }
+        }
+
+        if (this.x < -80 || this.x > V_WIDTH + 80 || this.y < -80 || this.y > V_HEIGHT + 80) {
+          this.active = false;
+        }
+      }
+
+      explode() {
+        this.active = false;
+        // Explosion particles — bigger than normal
+        for (let i = 0; i < 30; i++) {
+          particles.push(new Particle(this.x, this.y, i % 3 === 0 ? '#ffffff' : (i % 3 === 1 ? '#bd00ff' : '#ff00ff')));
+        }
+        audioEngine.playEnemyExplosion();
+
+        // Area damage — hits all enemies within blastRadius
+        let anyDestroyed = false;
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          const e = enemies[i];
+          if (!e.active) continue;
+          const d = Math.hypot(e.x - this.x, e.y - this.y);
+          if (d < this.blastRadius) {
+            const destroyed = e.takeDamage(this.damage);
+            if (destroyed) {
+              audioEngine.playEnemyExplosion();
+              score += e.scoreValue;
+              for (let p = 0; p < 10; p++) {
+                particles.push(new Particle(e.x, e.y, e.color));
+              }
+              const isBossWave = (waveManager.currentWave === 10 || waveManager.currentWave === 20 || waveManager.currentWave === 30);
+              if (!e.isLeftover && !isBossWave) waveManager.enemiesDestroyed++;
+              anyDestroyed = true;
+            }
+          }
+        }
+
+        if (anyDestroyed) {
+          const isBossWave = (waveManager.currentWave === 10 || waveManager.currentWave === 20 || waveManager.currentWave === 30);
+          if (!isBossWave && waveManager.enemiesDestroyed >= waveManager.enemiesTotal) {
+            triggerWaveClear();
+          }
+        }
+      }
+
+      draw(ctx) {
+        if (!this.active) return;
+        ctx.save();
+
+        // Glowing purple trail
+        if (this.trail.length > 1) {
+          ctx.strokeStyle = 'rgba(189, 0, 255, 0.5)';
+          ctx.lineWidth = 6;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(this.trail[0].x, this.trail[0].y);
+          for (let i = 1; i < this.trail.length; i++) ctx.lineTo(this.trail[i].x, this.trail[i].y);
+          ctx.stroke();
+        }
+
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+
+        // Missile body — purple/magenta
+        ctx.shadowBlur = 22;
+        ctx.shadowColor = '#bd00ff';
+        ctx.fillStyle = '#cc44ff';
+        ctx.fillRect(-12, -4, 24, 8);
+
+        // Bright nose
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(12, 0);
+        ctx.lineTo(7, -5);
+        ctx.lineTo(7, 5);
+        ctx.closePath();
+        ctx.fill();
+
+        // Fins
+        ctx.fillStyle = '#ff00ff';
+        ctx.shadowColor = '#ff00ff';
+        ctx.beginPath();
+        ctx.moveTo(-8, -4);
+        ctx.lineTo(-14, -10);
+        ctx.lineTo(-6, -4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(-8, 4);
+        ctx.lineTo(-14, 10);
+        ctx.lineTo(-6, 4);
+        ctx.closePath();
+        ctx.fill();
+
+        // Blast radius ring pulse
+        ctx.rotate(-this.angle);
+        const alpha = 0.15 + Math.sin(Date.now() * 0.008) * 0.1;
+        ctx.strokeStyle = `rgba(189, 0, 255, ${alpha})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.blastRadius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+    }
     class Player {
       constructor() {
         this.width = 36;
@@ -2115,19 +2328,19 @@
 
         if (waveNum === 10) {
           this.enemiesTotal = 1;
-          this.spawnQueue.push({ type: 'BOSS1', hp: 750, x: V_WIDTH / 2, y: -60 });
+          this.spawnQueue.push({ type: 'BOSS1', hp: 375, x: V_WIDTH / 2, y: -60 });
           this.spawnInterval = 0.5;
           weaponKitsDropped = 0; // Reset for next bracket (phases 11-19)
           return;
         } else if (waveNum === 20) {
           this.enemiesTotal = 1;
-          this.spawnQueue.push({ type: 'BOSS2', hp: 750, x: V_WIDTH / 2, y: -60 });
+          this.spawnQueue.push({ type: 'BOSS2', hp: 375, x: V_WIDTH / 2, y: -60 });
           this.spawnInterval = 0.5;
           weaponKitsDropped = 0; // Reset for next bracket (phases 21-29)
           return;
         } else if (waveNum === 30) {
           this.enemiesTotal = 1;
-          this.spawnQueue.push({ type: 'BOSS3', hp: 6000, x: V_WIDTH / 2, y: -60 });
+          this.spawnQueue.push({ type: 'BOSS3', hp: 3000, x: V_WIDTH / 2, y: -60 });
           this.spawnInterval = 0.5;
           return;
         }
@@ -2261,6 +2474,10 @@
     let particles = [];
     let powerups = [];
     let missiles = [];
+    let playerMissiles = [];          // Player homing missiles (unlocked by MISSILE_KIT)
+    let playerMissileActive = false;  // True after collecting MISSILE_KIT
+    let playerMissileTimer = 0;       // Seconds until next missile launch
+    const PLAYER_MISSILE_INTERVAL = 2.0; // Fire one every 2 seconds
     let waveTime = 0;
     let pointsTimer = 0;
     let weaponKitsDropped = 0; // Tracks weapon kit drops per phase bracket
@@ -2273,6 +2490,7 @@
       menuButton: { text: "MENU", x: 0, y: 0, w: 0, h: 0, hover: false },
       rankingButton: { text: "RANKING", x: 0, y: 0, w: 0, h: 0, hover: false },
       leaderboardButton: { text: "VER RANKING", x: 0, y: 0, w: 0, h: 0, hover: false },
+      backButton: { text: "\u2190 MENU PRINCIPAL", x: 0, y: 0, w: 0, h: 0, hover: false },
       muteButton: { x: V_WIDTH - 150, y: 13, w: 24, h: 24, hover: false }
     };
 
@@ -2288,6 +2506,9 @@
       particles = [];
       powerups = [];
       missiles = [];
+      playerMissiles = [];
+      playerMissileActive = false;
+      playerMissileTimer = 0;
       waveTime = 0;
       pointsTimer = 0;
       weaponKitsDropped = 0;     // Reset kit counter on new game
@@ -2693,8 +2914,11 @@
                 if (enemy.guaranteedDrop) {
                   powerups.push(new PowerUp(enemy.x, enemy.y, enemy.guaranteedDrop));
                 } else if (isBossWave && enemy.type.startsWith('BOSS')) {
-                  // Boss defeated → drop emergency MEDKIT (restores all lives)
+                  // Boss defeated → drop MEDKIT + MISSILE_KIT after BOSS2
                   powerups.push(new PowerUp(enemy.x, enemy.y + 30, 'MEDKIT'));
+                  if (enemy.type === 'BOSS2') {
+                    powerups.push(new PowerUp(enemy.x - 40, enemy.y + 60, 'MISSILE_KIT'));
+                  }
                 } else if (!isBossWave) {
                   // Collectible items spawned on even waves (only if not boss wave)
                   const isEvenWave = (waveManager.currentWave % 2 === 0);
@@ -2868,6 +3092,14 @@
               for (let p = 0; p < 20; p++) {
                 particles.push(new Particle(player.x, player.y, '#ff0055'));
               }
+            } else if (pu.type === 'MISSILE_KIT') {
+              // Unlock permanent homing player missile
+              playerMissileActive = true;
+              playerMissileTimer = 0;
+              audioEngine.playPowerUp();
+              for (let p = 0; p < 25; p++) {
+                particles.push(new Particle(player.x, player.y, '#bd00ff'));
+              }
             }
             score += 15;
           }
@@ -2948,6 +3180,16 @@
         powerups.forEach(pu => pu.update(dt));
         missiles.forEach(m => m.update(dt));
 
+        // Player homing missile spawn
+        if (playerMissileActive && enemies.length > 0) {
+          playerMissileTimer += dt;
+          if (playerMissileTimer >= PLAYER_MISSILE_INTERVAL) {
+            playerMissileTimer = 0;
+            playerMissiles.push(new PlayerMissile(player.x, player.y - 10));
+          }
+        }
+        playerMissiles.forEach(pm => pm.update(dt));
+
         // 2. Resolve collisions
         checkCollisions();
 
@@ -2955,11 +3197,13 @@
         particles = particles.filter(p => p.life > 0);
         powerups = powerups.filter(pu => pu.active);
         missiles = missiles.filter(m => m.active);
+        playerMissiles = playerMissiles.filter(pm => pm.active);
 
         // 3. Render entities
         enemies.forEach(e => e.draw(ctx));
         bullets.forEach(b => b.draw(ctx));
         missiles.forEach(m => m.draw(ctx));
+        playerMissiles.forEach(pm => pm.draw(ctx));
         powerups.forEach(pu => pu.draw(ctx));
         particles.forEach(p => p.draw(ctx));
         player.draw(ctx);
@@ -3134,7 +3378,7 @@
 
           topEntries.forEach((entry, i) => {
             const y = startY + 20 + i * rowH;
-            const isPlayer = entry.ip === playerIP;
+            const isPlayer = entry.uid === PLAYER_UID;
 
             if (isPlayer) {
               ctx.fillStyle = 'rgba(0, 255, 255, 0.07)';
@@ -3195,8 +3439,8 @@
           });
         }
 
-        buttons.menuButton.text = 'VOLTAR';
-        drawButton(ctx, buttons.menuButton, V_WIDTH / 2, V_HEIGHT - 55, 180, 42);
+        buttons.backButton.text = '← MENU PRINCIPAL';
+        drawButton(ctx, buttons.backButton, V_WIDTH / 2, V_HEIGHT - 52, 220, 44);
         drawPlayableBorders(ctx);
       }
       
@@ -3293,7 +3537,7 @@
         buttons.menuButton.hover = isInside(x, y, buttons.menuButton);
         buttons.leaderboardButton.hover = isInside(x, y, buttons.leaderboardButton);
       } else if (gameState === 'LEADERBOARD') {
-        buttons.menuButton.hover = isInside(x, y, buttons.menuButton);
+        buttons.backButton.hover = isInside(x, y, buttons.backButton);
       }
       handleMove(e.clientX, e.clientY);
     });
@@ -3327,7 +3571,7 @@
           else if (isInside(x, y, buttons.leaderboardButton)) gameState = 'LEADERBOARD';
           else if (isInside(x, y, buttons.menuButton)) goToMenu();
         } else if (gameState === 'LEADERBOARD') {
-          if (isInside(x, y, buttons.menuButton)) goToMenu();
+          if (isInside(x, y, buttons.backButton)) goToMenu();
         }
       }
     }, { passive: false });
@@ -3362,7 +3606,7 @@
         else if (isInside(x, y, buttons.leaderboardButton)) gameState = 'LEADERBOARD';
         else if (isInside(x, y, buttons.menuButton)) goToMenu();
       } else if (gameState === 'LEADERBOARD') {
-        if (isInside(x, y, buttons.menuButton)) goToMenu();
+        if (isInside(x, y, buttons.backButton)) goToMenu();
       }
     });
 
