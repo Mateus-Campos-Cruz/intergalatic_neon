@@ -510,12 +510,13 @@
 
     // --- BULLETS & PARTICLES ---
     class Bullet {
-      constructor(x, y, isEnemy, weaponLevel = 1, angle = 0) {
+      constructor(x, y, isEnemy, weaponLevel = 1, angle = 0, damage = 1) {
         this.x = x;
         this.y = y;
         this.isEnemy = isEnemy;
         this.weaponLevel = weaponLevel;
         this.angle = angle; // support spread angles
+        this.damage = damage;
         this.speed = isEnemy ? 280 : 650;
         this.width = isEnemy ? 8 : 4;
         this.height = isEnemy ? 8 : 16;
@@ -528,6 +529,12 @@
           } else if (weaponLevel === 3) {
             this.width = 8;
             this.height = 20;
+          } else if (weaponLevel === 4) {
+            this.width = 10;
+            this.height = 22;
+          } else if (weaponLevel >= 5) {
+            this.width = 12;
+            this.height = 24;
           }
         }
         
@@ -540,7 +547,8 @@
         if (this.trail.length > 5) this.trail.shift();
 
         if (this.isEnemy) {
-          this.y += this.speed * dt;
+          this.y += this.speed * Math.cos(this.angle) * dt;
+          this.x += this.speed * Math.sin(this.angle) * dt;
         } else {
           // Adjust trajectory according to shoot angle
           this.y -= this.speed * Math.cos(this.angle) * dt;
@@ -586,6 +594,12 @@
           } else if (this.weaponLevel === 3) {
             color = '#ffaa00';
             glow = '#ffd700';
+          } else if (this.weaponLevel === 4) {
+            color = '#39ff14';
+            glow = '#39ff14';
+          } else if (this.weaponLevel >= 5) {
+            color = '#bd00ff';
+            glow = '#bd00ff';
           }
 
           ctx.shadowBlur = 12;
@@ -808,20 +822,35 @@
             
             // Firing patterns depending on weaponLevel
             if (this.weaponLevel === 1) {
-              // Level 1: 2 parallel lasers (cyan)
-              bullets.push(new Bullet(this.x - 10, this.y - 12, false, 1));
-              bullets.push(new Bullet(this.x + 10, this.y - 12, false, 1));
+              // Level 1: 2 parallel lasers (cyan), damage 1
+              bullets.push(new Bullet(this.x - 10, this.y - 12, false, 1, 0, 1.0));
+              bullets.push(new Bullet(this.x + 10, this.y - 12, false, 1, 0, 1.0));
             } else if (this.weaponLevel === 2) {
-              // Level 2: 3 spread lasers (magenta)
-              bullets.push(new Bullet(this.x, this.y - 12, false, 2, 0)); // straight
-              bullets.push(new Bullet(this.x - 12, this.y - 10, false, 2, -0.15)); // left angled
-              bullets.push(new Bullet(this.x + 12, this.y - 10, false, 2, 0.15)); // right angled
+              // Level 2: 3 spread lasers (magenta), damage 1.2
+              bullets.push(new Bullet(this.x, this.y - 12, false, 2, 0, 1.2)); // straight
+              bullets.push(new Bullet(this.x - 12, this.y - 10, false, 2, -0.15, 1.2)); // left angled
+              bullets.push(new Bullet(this.x + 12, this.y - 10, false, 2, 0.15, 1.2)); // right angled
+            } else if (this.weaponLevel === 3) {
+              // Level 3: 4 spread heavy lasers (gold/orange), damage 1.5
+              bullets.push(new Bullet(this.x - 8, this.y - 14, false, 3, 0, 1.5)); // straight-left
+              bullets.push(new Bullet(this.x + 8, this.y - 14, false, 3, 0, 1.5)); // straight-right
+              bullets.push(new Bullet(this.x - 18, this.y - 10, false, 3, -0.28, 1.5)); // left angled
+              bullets.push(new Bullet(this.x + 18, this.y - 10, false, 3, 0.28, 1.5)); // right angled
+            } else if (this.weaponLevel === 4) {
+              // Level 4: 5 spread heavy lasers (neon green), damage 2.0
+              bullets.push(new Bullet(this.x, this.y - 15, false, 4, 0, 2.0)); // straight center
+              bullets.push(new Bullet(this.x - 10, this.y - 12, false, 4, -0.15, 2.0)); // mid-left angled
+              bullets.push(new Bullet(this.x + 10, this.y - 12, false, 4, 0.15, 2.0)); // mid-right angled
+              bullets.push(new Bullet(this.x - 20, this.y - 10, false, 4, -0.30, 2.0)); // far-left angled
+              bullets.push(new Bullet(this.x + 20, this.y - 10, false, 4, 0.30, 2.0)); // far-right angled
             } else {
-              // Level 3: 4 spread heavy lasers (gold/orange)
-              bullets.push(new Bullet(this.x - 8, this.y - 14, false, 3, 0)); // straight-left
-              bullets.push(new Bullet(this.x + 8, this.y - 14, false, 3, 0)); // straight-right
-              bullets.push(new Bullet(this.x - 18, this.y - 10, false, 3, -0.28)); // left-wide angled
-              bullets.push(new Bullet(this.x + 18, this.y - 10, false, 3, 0.28)); // right-wide angled
+              // Level 5: 6 spread heavy lasers (bright purple/violet), damage 2.5
+              bullets.push(new Bullet(this.x - 5, this.y - 15, false, 5, -0.05, 2.5)); // mid-left-straight
+              bullets.push(new Bullet(this.x + 5, this.y - 15, false, 5, 0.05, 2.5)); // mid-right-straight
+              bullets.push(new Bullet(this.x - 15, this.y - 12, false, 5, -0.20, 2.5)); // mid-left angled
+              bullets.push(new Bullet(this.x + 15, this.y - 12, false, 5, 0.18, 2.5)); // mid-right angled
+              bullets.push(new Bullet(this.x - 25, this.y - 10, false, 5, -0.38, 2.5)); // far-left angled
+              bullets.push(new Bullet(this.x + 25, this.y - 10, false, 5, 0.38, 2.5)); // far-right angled
             }
             audioEngine.playPlayerShoot();
           }
@@ -852,9 +881,15 @@
           } else if (this.weaponLevel === 2) {
             flameGrad.addColorStop(0, '#ff00ff');
             flameGrad.addColorStop(0.4, '#8800ff');
-          } else {
+          } else if (this.weaponLevel === 3) {
             flameGrad.addColorStop(0, '#ffd700');
             flameGrad.addColorStop(0.4, '#ff5500');
+          } else if (this.weaponLevel === 4) {
+            flameGrad.addColorStop(0, '#39ff14');
+            flameGrad.addColorStop(0.4, '#00aa00');
+          } else {
+            flameGrad.addColorStop(0, '#bd00ff');
+            flameGrad.addColorStop(0.4, '#6600cc');
           }
           flameGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
           
@@ -879,6 +914,14 @@
           mainColor = '#ff5500';
           wingColor = '#ffd700';
           glowColor = '#ffd700';
+        } else if (this.weaponLevel === 4) {
+          mainColor = '#39ff14';
+          wingColor = '#00ffaa';
+          glowColor = '#39ff14';
+        } else if (this.weaponLevel >= 5) {
+          mainColor = '#bd00ff';
+          wingColor = '#ff00ff';
+          glowColor = '#bd00ff';
         }
 
         ctx.shadowBlur = 12;
@@ -1155,6 +1198,132 @@
       ctx.restore();
     }
 
+    function drawBoss1(ctx, x, y, size, pulse) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(pulse, pulse);
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = '#ff003c';
+      ctx.strokeStyle = '#ff003c';
+      ctx.lineWidth = 3.5;
+
+      // Draw main body (Octagon shield shape)
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const angle = i * Math.PI / 4;
+        ctx.lineTo(Math.cos(angle) * size, Math.sin(angle) * (size * 0.9));
+      }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255, 0, 60, 0.15)';
+      ctx.fill();
+      ctx.stroke();
+
+      // Draw inner plates
+      ctx.strokeStyle = '#ffd700';
+      ctx.beginPath();
+      ctx.arc(0, 0, size * 0.5, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Draw core
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, size * 0.25, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function drawBoss2(ctx, x, y, size, pulse) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(pulse, pulse);
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = '#ff00ff';
+      ctx.strokeStyle = '#ff00ff';
+      ctx.lineWidth = 3;
+
+      // Crescent horns pointing down
+      ctx.beginPath();
+      ctx.moveTo(-size, -size * 0.5);
+      ctx.quadraticCurveTo(0, -size * 0.8, size, -size * 0.5);
+      ctx.lineTo(size * 0.6, size * 0.8);
+      ctx.lineTo(0, size * 0.3);
+      ctx.lineTo(-size * 0.6, size * 0.8);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255, 0, 255, 0.15)';
+      ctx.fill();
+      ctx.stroke();
+
+      // Secondary wings
+      ctx.strokeStyle = '#00ffff';
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.8, -size * 0.3);
+      ctx.lineTo(-size * 1.2, size * 0.2);
+      ctx.lineTo(-size * 0.6, size * 0.4);
+      ctx.moveTo(size * 0.8, -size * 0.3);
+      ctx.lineTo(size * 1.2, size * 0.2);
+      ctx.lineTo(size * 0.6, size * 0.4);
+      ctx.stroke();
+
+      // Core
+      ctx.fillStyle = '#ff00ff';
+      ctx.shadowColor = '#ff00ff';
+      ctx.beginPath();
+      ctx.arc(0, 0, size * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function drawBoss3(ctx, x, y, size, pulse) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(pulse, pulse);
+      ctx.shadowBlur = 25;
+      ctx.shadowColor = '#39ff14';
+      ctx.strokeStyle = '#39ff14';
+      ctx.lineWidth = 4;
+
+      // Outer ring with details
+      ctx.beginPath();
+      ctx.arc(0, 0, size, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Rotating panels effect (draw cross lines using tick)
+      ctx.save();
+      ctx.rotate(tick * 0.02);
+      ctx.strokeStyle = '#ffd700';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-size, 0);
+      ctx.lineTo(size, 0);
+      ctx.moveTo(0, -size);
+      ctx.lineTo(0, size);
+      ctx.stroke();
+      ctx.restore();
+
+      // Central triangle generator
+      ctx.beginPath();
+      for (let i = 0; i < 3; i++) {
+        const angle = i * Math.PI * 2 / 3 - Math.PI / 2;
+        ctx.lineTo(Math.cos(angle) * size * 0.6, Math.sin(angle) * size * 0.6);
+      }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(57, 255, 20, 0.15)';
+      ctx.fill();
+      ctx.stroke();
+
+      // Glowing core
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#39ff14';
+      ctx.beginPath();
+      ctx.arc(0, 0, size * 0.25, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
     class Enemy {
       constructor(type, x, y, hp) {
         this.type = type;
@@ -1162,20 +1331,30 @@
         this.y = y;
         this.hp = hp;
         this.maxHp = hp;
-        this.width = 34;
-        this.height = 34;
+        
+        if (type.startsWith('BOSS')) {
+          this.width = 70;
+          this.height = 70;
+          this.shootTimer = 0;
+          this.scoreValue = type === 'BOSS1' ? 500 : (type === 'BOSS2' ? 1000 : 2500);
+          this.color = type === 'BOSS1' ? '#ff003c' : (type === 'BOSS2' ? '#ff00ff' : '#39ff14');
+        } else {
+          this.width = 34;
+          this.height = 34;
+          this.scoreValue = type === 'A' ? 10 : (type === 'B' ? 25 : 50);
+          this.color = type === 'A' ? '#ff6600' : (type === 'B' ? '#ff0099' : '#ff003c');
+        }
+        
         this.active = true;
-        this.scoreValue = type === 'A' ? 10 : (type === 'B' ? 25 : 50);
         this.pulseTime = Math.random() * 100;
         this.baseX = x;
         this.sineOffset = Math.random() * Math.PI * 2;
-        this.color = type === 'A' ? '#ff6600' : (type === 'B' ? '#ff0099' : '#ff003c');
       }
 
       update(dt, waveTime, speedMultiplier) {
         this.pulseTime += dt * 6;
 
-        // Motion behaviors (increased base speeds for faster action)
+        // Motion behaviors
         if (this.type === 'A') {
           // Standard descend + slight wiggle
           this.y += 60 * speedMultiplier * dt;
@@ -1188,9 +1367,68 @@
           // Rapid wide swooping movement
           this.y += 95 * speedMultiplier * dt;
           this.x = this.baseX + Math.sin(waveTime * 2.0 + this.sineOffset) * 75;
+        } else if (this.type === 'BOSS1') {
+          // Goliath Prime: descende até Y=130 e oscila horizontalmente
+          if (this.y < 130) {
+            this.y += 65 * dt;
+          } else {
+            this.y = 130;
+            this.x = V_WIDTH / 2 + Math.sin(waveTime * 1.5) * 120;
+          }
+          
+          this.shootTimer += dt;
+          if (this.shootTimer >= 1.5) {
+            this.shootTimer = 0;
+            // 3-bullet spread down
+            bullets.push(new Bullet(this.x, this.y + 35, true, 1, 0)); // straight down
+            bullets.push(new Bullet(this.x, this.y + 35, true, 1, -0.2)); // angled left
+            bullets.push(new Bullet(this.x, this.y + 35, true, 1, 0.2)); // angled right
+          }
+        } else if (this.type === 'BOSS2') {
+          // Nebula Dreadnought: descende até Y=140 e executa padrão em 8
+          if (this.y < 140) {
+            this.y += 65 * dt;
+          } else {
+            this.x = V_WIDTH / 2 + Math.sin(waveTime * 2.0) * 140;
+            this.y = 140 + Math.sin(waveTime * 4.0) * 30;
+          }
+
+          this.shootTimer += dt;
+          if (this.shootTimer >= 2.0) {
+            this.shootTimer = 0;
+            // 6-bullet circular ring
+            for (let i = 0; i < 6; i++) {
+              const angle = i * Math.PI / 3;
+              bullets.push(new Bullet(this.x, this.y + 35, true, 1, angle));
+            }
+          }
+        } else if (this.type === 'BOSS3') {
+          // Intergalactic Emperor: descende até Y=160 e executa trajetórias senoidais
+          if (this.y < 160) {
+            this.y += 65 * dt;
+          } else {
+            this.x = V_WIDTH / 2 + Math.sin(waveTime * 1.0) * 160;
+            this.y = 160 + Math.cos(waveTime * 2.0) * 40;
+          }
+
+          this.shootTimer += dt;
+          if (this.shootTimer >= 1.2) {
+            this.shootTimer = 0;
+            // 8-bullet circular ring
+            for (let i = 0; i < 8; i++) {
+              const angle = i * Math.PI / 4;
+              bullets.push(new Bullet(this.x, this.y + 35, true, 1, angle));
+            }
+            // Targeted bullet at player
+            const playerAngle = Math.atan2(player.x - this.x, player.y - this.y);
+            const targetedBullet = new Bullet(this.x, this.y + 35, true, 1, playerAngle);
+            targetedBullet.speed = 340; // slightly faster
+            bullets.push(targetedBullet);
+          }
         }
 
-        if (this.y > V_HEIGHT + 40) {
+        // Keep Boss within screen bounds vertically
+        if (!this.type.startsWith('BOSS') && this.y > V_HEIGHT + 40) {
           this.active = false;
         }
       }
@@ -1214,10 +1452,16 @@
           drawEnemyB(ctx, this.x, this.y, size, pulse);
         } else if (this.type === 'C') {
           drawEnemyC(ctx, this.x, this.y, size, pulse);
+        } else if (this.type === 'BOSS1') {
+          drawBoss1(ctx, this.x, this.y, size, pulse);
+        } else if (this.type === 'BOSS2') {
+          drawBoss2(ctx, this.x, this.y, size, pulse);
+        } else if (this.type === 'BOSS3') {
+          drawBoss3(ctx, this.x, this.y, size, pulse);
         }
 
-        // Render health bar if damaged
-        if (this.hp < this.maxHp) {
+        // Render health bar if damaged (and not a boss)
+        if (this.hp < this.maxHp && !this.type.startsWith('BOSS')) {
           ctx.save();
           const barW = 24;
           const barH = 3;
@@ -1248,6 +1492,15 @@
       }
 
       startWave(waveNum) {
+        if (waveNum > 30) {
+          gameState = 'VICTORY';
+          if (score > highscore) {
+            highscore = score;
+            localStorage.setItem('intergalactic_neon_highscore', highscore.toString());
+          }
+          return;
+        }
+
         this.currentWave = waveNum;
         this.state = 'TRANSITION';
         this.transitionTimer = this.transitionDuration;
@@ -1259,39 +1512,87 @@
         let total = 0;
         let types = [];
         
-        // Scale enemy HP as waves progress
-        let hpIncrease = Math.floor((waveNum - 1) / 3); // +1 HP every 3 waves
+        // hpIncrease: +1 enemy HP every 4 waves
+        let hpIncrease = Math.floor((waveNum - 1) / 4);
 
-        // Define wave configurations according to standard rules
+        if (waveNum === 10) {
+          this.enemiesTotal = 1;
+          this.spawnQueue.push({ type: 'BOSS1', hp: 50, x: V_WIDTH / 2, y: -60 });
+          this.spawnInterval = 0.5;
+          return;
+        } else if (waveNum === 20) {
+          this.enemiesTotal = 1;
+          this.spawnQueue.push({ type: 'BOSS2', hp: 100, x: V_WIDTH / 2, y: -60 });
+          this.spawnInterval = 0.5;
+          return;
+        } else if (waveNum === 30) {
+          this.enemiesTotal = 1;
+          this.spawnQueue.push({ type: 'BOSS3', hp: 200, x: V_WIDTH / 2, y: -60 });
+          this.spawnInterval = 0.5;
+          return;
+        }
+
+        // Regular waves
         if (waveNum <= 3) {
-          total = 5 + waveNum * 2; // W1: 7, W2: 9, W3: 11
+          total = 6 + waveNum * 2; // W1: 8, W2: 10, W3: 12
           for (let i = 0; i < total; i++) {
-            types.push({ type: 'A', hp: 1 + hpIncrease });
+            types.push({ type: Math.random() < 0.85 ? 'A' : 'B', hp: 1 });
           }
-          this.spawnInterval = 0.35; // Spawns faster
+          this.spawnInterval = 0.35;
         } else if (waveNum <= 6) {
-          total = 8 + waveNum; // W4: 12, W5: 13, W6: 14
-          for (let i = 0; i < total; i++) {
-            if (Math.random() < 0.45) {
-              types.push({ type: 'B', hp: (Math.random() < 0.5 ? 1 : 2) + hpIncrease });
-            } else {
-              types.push({ type: 'A', hp: 1 + hpIncrease });
-            }
-          }
-          this.spawnInterval = 0.28; // Spawns faster
-        } else {
-          total = Math.min(25, 12 + waveNum); // Max 25 enemies to prevent crowd saturation
+          total = 10 + waveNum; // W4: 14, W5: 15, W6: 16
           for (let i = 0; i < total; i++) {
             let r = Math.random();
-            if (r < 0.3) {
-              types.push({ type: 'C', hp: (Math.random() < 0.5 ? 2 : 4) + hpIncrease });
-            } else if (r < 0.65) {
-              types.push({ type: 'B', hp: (Math.random() < 0.5 ? 2 : 3) + hpIncrease });
-            } else {
-              types.push({ type: 'A', hp: 2 + hpIncrease });
-            }
+            if (r < 0.6) types.push({ type: 'A', hp: 1 + hpIncrease });
+            else if (r < 0.9) types.push({ type: 'B', hp: 1 + hpIncrease });
+            else types.push({ type: 'C', hp: 1 + hpIncrease });
           }
-          this.spawnInterval = 0.22; // Spawns faster
+          this.spawnInterval = 0.30;
+        } else if (waveNum <= 9) {
+          total = 12 + waveNum; // W7: 19, W8: 20, W9: 21
+          for (let i = 0; i < total; i++) {
+            let r = Math.random();
+            if (r < 0.4) types.push({ type: 'A', hp: 1 + hpIncrease });
+            else if (r < 0.75) types.push({ type: 'B', hp: 2 + hpIncrease });
+            else types.push({ type: 'C', hp: 2 + hpIncrease });
+          }
+          this.spawnInterval = 0.28;
+        } else if (waveNum <= 15) {
+          total = 14 + waveNum; // W11-15
+          for (let i = 0; i < total; i++) {
+            let r = Math.random();
+            if (r < 0.3) types.push({ type: 'A', hp: 2 + hpIncrease });
+            else if (r < 0.7) types.push({ type: 'B', hp: 2 + hpIncrease });
+            else types.push({ type: 'C', hp: 3 + hpIncrease });
+          }
+          this.spawnInterval = 0.25;
+        } else if (waveNum <= 19) {
+          total = 15 + waveNum; // W16-19
+          for (let i = 0; i < total; i++) {
+            let r = Math.random();
+            if (r < 0.2) types.push({ type: 'A', hp: 2 + hpIncrease });
+            else if (r < 0.6) types.push({ type: 'B', hp: 3 + hpIncrease });
+            else types.push({ type: 'C', hp: 4 + hpIncrease });
+          }
+          this.spawnInterval = 0.23;
+        } else if (waveNum <= 25) {
+          total = 16 + waveNum; // W21-25
+          for (let i = 0; i < total; i++) {
+            let r = Math.random();
+            if (r < 0.15) types.push({ type: 'A', hp: 3 + hpIncrease });
+            else if (r < 0.5) types.push({ type: 'B', hp: 4 + hpIncrease });
+            else types.push({ type: 'C', hp: 5 + hpIncrease });
+          }
+          this.spawnInterval = 0.20;
+        } else {
+          total = 18 + waveNum; // W26-29
+          for (let i = 0; i < total; i++) {
+            let r = Math.random();
+            if (r < 0.1) types.push({ type: 'A', hp: 4 + hpIncrease });
+            else if (r < 0.4) types.push({ type: 'B', hp: 5 + hpIncrease });
+            else types.push({ type: 'C', hp: 6 + hpIncrease });
+          }
+          this.spawnInterval = 0.18;
         }
         
         this.enemiesTotal = total;
@@ -1487,6 +1788,44 @@
       ctx.fillText(`${score.toString().padStart(6, '0')}`, V_WIDTH - 25, 25);
 
       ctx.restore();
+
+      // Boss Health Bar (if any boss is active)
+      const activeBoss = enemies.find(e => e.type.startsWith('BOSS'));
+      if (activeBoss) {
+        ctx.save();
+        const barW = 280;
+        const barH = 8;
+        const barX = (V_WIDTH - barW) / 2;
+        const barY = 65;
+
+        // Boss Name
+        ctx.font = `bold 10px 'Orbitron', monospace`;
+        ctx.fillStyle = activeBoss.color;
+        ctx.shadowColor = activeBoss.color;
+        ctx.shadowBlur = 6;
+        ctx.textAlign = 'center';
+        let bossName = "GOLIATH PRIME";
+        if (activeBoss.type === 'BOSS2') bossName = "NEBULA DREADNOUGHT";
+        if (activeBoss.type === 'BOSS3') bossName = "INTERGALACTIC EMPEROR";
+        ctx.fillText(bossName, V_WIDTH / 2, barY - 6);
+
+        // Bar Background
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.fillRect(barX, barY, barW, barH);
+
+        // Bar Fill
+        const ratio = activeBoss.hp / activeBoss.maxHp;
+        ctx.fillStyle = activeBoss.color;
+        ctx.shadowColor = activeBoss.color;
+        ctx.shadowBlur = 10;
+        ctx.fillRect(barX, barY, barW * ratio, barH);
+
+        // Bar Border
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, barY, barW, barH);
+        ctx.restore();
+      }
     }
 
     function drawGlitchText(ctx, text, x, y, fontSize, scaleRatio) {
@@ -1677,7 +2016,15 @@
                     }
                   }
                   audioEngine.playWaveClear();
-                  waveManager.startWave(waveManager.currentWave + 1);
+                  if (waveManager.currentWave >= 30) {
+                    gameState = 'VICTORY';
+                    if (score > highscore) {
+                      highscore = score;
+                      localStorage.setItem('intergalactic_neon_highscore', highscore.toString());
+                    }
+                  } else {
+                    waveManager.startWave(waveManager.currentWave + 1);
+                  }
                 }
               }
               break;
@@ -1735,7 +2082,15 @@
                 }
               }
               audioEngine.playWaveClear();
-              waveManager.startWave(waveManager.currentWave + 1);
+              if (waveManager.currentWave >= 30) {
+                gameState = 'VICTORY';
+                if (score > highscore) {
+                  highscore = score;
+                  localStorage.setItem('intergalactic_neon_highscore', highscore.toString());
+                }
+              } else {
+                waveManager.startWave(waveManager.currentWave + 1);
+              }
             }
           }
         }
@@ -1751,7 +2106,7 @@
           if (dist < colLimit) {
             pu.active = false;
             if (pu.type === 'WEAPON') {
-              if (player.weaponLevel < 3) {
+              if (player.weaponLevel < 5) {
                 player.weaponLevel++;
                 audioEngine.playPowerUp();
               }
@@ -1890,6 +2245,33 @@
         drawButton(ctx, buttons.restartButton, V_WIDTH / 2, 450, 170, 45);
         drawButton(ctx, buttons.menuButton, V_WIDTH / 2, 515, 170, 45);
         drawPlayableBorders(ctx);
+      } else if (gameState === 'VICTORY') {
+        // Render background particles
+        particles.forEach(p => p.update(dt));
+        particles = particles.filter(p => p.life > 0);
+        particles.forEach(p => p.draw(ctx));
+
+        drawGlitchText(ctx, "VICTORY", V_WIDTH / 2, 230, 40, scale);
+        
+        ctx.font = `bold 16px 'Orbitron', sans-serif`;
+        ctx.fillStyle = '#ffd700';
+        ctx.textAlign = 'center';
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#ffd700';
+        ctx.fillText("VOCE SALVOU A GALAXIA!", V_WIDTH / 2, 290);
+
+        ctx.font = `14px 'Orbitron', sans-serif`;
+        ctx.fillStyle = '#39ff14';
+        ctx.shadowColor = '#39ff14';
+        ctx.shadowBlur = 6;
+        ctx.fillText(`SCORE FINAL: ${score}`, V_WIDTH / 2, 335);
+
+        ctx.fillStyle = '#00ffff';
+        ctx.fillText(`RECORD: ${highscore}`, V_WIDTH / 2, 370);
+
+        drawButton(ctx, buttons.restartButton, V_WIDTH / 2, 470, 170, 45);
+        drawButton(ctx, buttons.menuButton, V_WIDTH / 2, 535, 170, 45);
+        drawPlayableBorders(ctx);
       }
 
       ctx.restore();
@@ -1974,7 +2356,7 @@
       
       if (gameState === 'MENU') {
         buttons.startButton.hover = isInside(x, y, buttons.startButton);
-      } else if (gameState === 'GAME_OVER') {
+      } else if (gameState === 'GAME_OVER' || gameState === 'VICTORY') {
         buttons.restartButton.hover = isInside(x, y, buttons.restartButton);
         buttons.menuButton.hover = isInside(x, y, buttons.menuButton);
       }
@@ -1994,7 +2376,7 @@
           player.targetY = y;
         } else if (gameState === 'MENU') {
           if (isInside(x, y, buttons.startButton)) startGame();
-        } else if (gameState === 'GAME_OVER') {
+        } else if (gameState === 'GAME_OVER' || gameState === 'VICTORY') {
           if (isInside(x, y, buttons.restartButton)) startGame();
           else if (isInside(x, y, buttons.menuButton)) goToMenu();
         }
@@ -2016,7 +2398,7 @@
 
       if (gameState === 'MENU') {
         if (isInside(x, y, buttons.startButton)) startGame();
-      } else if (gameState === 'GAME_OVER') {
+      } else if (gameState === 'GAME_OVER' || gameState === 'VICTORY') {
         if (isInside(x, y, buttons.restartButton)) startGame();
         else if (isInside(x, y, buttons.menuButton)) goToMenu();
       }
