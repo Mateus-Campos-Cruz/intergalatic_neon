@@ -1981,13 +1981,15 @@
 
         if (waveNum === 10) {
           this.enemiesTotal = 1;
-          this.spawnQueue.push({ type: 'BOSS1', hp: 1500, x: V_WIDTH / 2, y: -60 });
+          this.spawnQueue.push({ type: 'BOSS1', hp: 750, x: V_WIDTH / 2, y: -60 });
           this.spawnInterval = 0.5;
+          weaponKitsDropped = 0; // Reset for next bracket (phases 11-19)
           return;
         } else if (waveNum === 20) {
           this.enemiesTotal = 1;
           this.spawnQueue.push({ type: 'BOSS2', hp: 3000, x: V_WIDTH / 2, y: -60 });
           this.spawnInterval = 0.5;
+          weaponKitsDropped = 0; // Reset for next bracket (phases 21-29)
           return;
         } else if (waveNum === 30) {
           this.enemiesTotal = 1;
@@ -2126,6 +2128,7 @@
     let powerups = [];
     let waveTime = 0;
     let pointsTimer = 0;
+    let weaponKitsDropped = 0; // Tracks weapon kit drops per phase bracket
 
     // --- INTERACTIVE UI BUTTONS ---
     const buttons = {
@@ -2150,6 +2153,7 @@
       powerups = [];
       waveTime = 0;
       pointsTimer = 0;
+      weaponKitsDropped = 0; // Reset kit counter on new game
       player.reset();
       waveManager.startWave(1);
       gameState = 'PLAYING';
@@ -2553,7 +2557,10 @@
                   // Collectible items spawned on even waves (only if not boss wave)
                   const isEvenWave = (waveManager.currentWave % 2 === 0);
                   if (isEvenWave && Math.random() < 0.22) { // 22% chance of drop
-                    const type = Math.random() < 0.5 ? 'WEAPON' : 'SHIELD';
+                    // Cap weapon kits at 2 per bracket (phases 1-9 and 11-19)
+                    const canDropWeapon = weaponKitsDropped < 2;
+                    const type = (Math.random() < 0.5 && canDropWeapon) ? 'WEAPON' : 'SHIELD';
+                    if (type === 'WEAPON') weaponKitsDropped++;
                     powerups.push(new PowerUp(enemy.x, enemy.y, type));
                   }
                 }
@@ -2620,7 +2627,10 @@
               // Collectible items spawned on even waves (onda sim, onda não)
               const isEvenWave = (waveManager.currentWave % 2 === 0);
               if (isEvenWave && Math.random() < 0.22) {
-                const type = Math.random() < 0.5 ? 'WEAPON' : 'SHIELD';
+                // Cap weapon kits at 2 per bracket (phases 1-9 and 11-19)
+                const canDropWeapon = weaponKitsDropped < 2;
+                const type = (Math.random() < 0.5 && canDropWeapon) ? 'WEAPON' : 'SHIELD';
+                if (type === 'WEAPON') weaponKitsDropped++;
                 powerups.push(new PowerUp(enemy.x, enemy.y, type));
               }
             }
