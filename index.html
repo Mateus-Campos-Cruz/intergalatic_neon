@@ -1260,7 +1260,7 @@
               for (let p = 0; p < 10; p++) {
                 particles.push(new Particle(e.x, e.y, e.color));
               }
-              const isBossWave = (waveManager.currentWave === 10 || waveManager.currentWave === 20 || waveManager.currentWave === 30);
+              const isBossWave = (waveManager.currentWave === 8 || waveManager.currentWave === 16 || waveManager.currentWave === 24);
               if (!e.isLeftover && !isBossWave) waveManager.enemiesDestroyed++;
               anyDestroyed = true;
             }
@@ -1268,7 +1268,7 @@
         }
 
         if (anyDestroyed) {
-          const isBossWave = (waveManager.currentWave === 10 || waveManager.currentWave === 20 || waveManager.currentWave === 30);
+          const isBossWave = (waveManager.currentWave === 8 || waveManager.currentWave === 16 || waveManager.currentWave === 24);
           if (!isBossWave && waveManager.enemiesDestroyed >= waveManager.enemiesTotal) {
             triggerWaveClear();
           }
@@ -2293,14 +2293,14 @@
       }
 
       startWave(waveNum) {
-        if (waveNum > 30) {
+        if (waveNum > 24) {
           gameState = 'VICTORY';
           scoreSaved = false;
           if (score > highscore) {
             highscore = score;
             localStorage.setItem('intergalactic_neon_highscore', highscore.toString());
           }
-          saveScore(playerName, score, 30);
+          saveScore(playerName, score, 24);
           loadLeaderboard();
           return;
         }
@@ -2326,19 +2326,19 @@
         // hpIncrease: +1 enemy HP every 4 waves
         let hpIncrease = Math.floor((waveNum - 1) / 4);
 
-        if (waveNum === 10) {
+        if (waveNum === 8) {
           this.enemiesTotal = 1;
           this.spawnQueue.push({ type: 'BOSS1', hp: 150, x: V_WIDTH / 2, y: -60 });
           this.spawnInterval = 0.5;
-          weaponKitsDropped = 0; // Reset for next bracket (phases 11-19)
+          weaponKitsDropped = 0; // Reset for next bracket (phases 9-15)
           return;
-        } else if (waveNum === 20) {
+        } else if (waveNum === 16) {
           this.enemiesTotal = 1;
           this.spawnQueue.push({ type: 'BOSS2', hp: 150, x: V_WIDTH / 2, y: -60 });
           this.spawnInterval = 0.5;
-          weaponKitsDropped = 0; // Reset for next bracket (phases 21-29)
+          weaponKitsDropped = 0; // Reset for next bracket (phases 17-23)
           return;
-        } else if (waveNum === 30) {
+        } else if (waveNum === 24) {
           this.enemiesTotal = 1;
           this.spawnQueue.push({ type: 'BOSS3', hp: 150, x: V_WIDTH / 2, y: -60 });
           this.spawnInterval = 0.5;
@@ -2346,14 +2346,14 @@
         }
 
         // Regular waves
-        if (waveNum <= 3) {
-          total = 6 + waveNum * 2; // W1: 8, W2: 10, W3: 12
+        if (waveNum <= 2) {
+          total = 6 + waveNum * 2; // W1: 8, W2: 10
           for (let i = 0; i < total; i++) {
             types.push({ type: Math.random() < 0.85 ? 'A' : 'B', hp: 1 });
           }
           this.spawnInterval = 0.35;
-        } else if (waveNum <= 6) {
-          total = 10 + waveNum; // W4: 14, W5: 15, W6: 16
+        } else if (waveNum <= 5) {
+          total = 10 + waveNum; // W3: 13, W4: 14, W5: 15
           for (let i = 0; i < total; i++) {
             let r = Math.random();
             if (r < 0.6) types.push({ type: 'A', hp: 1 + hpIncrease });
@@ -2361,8 +2361,8 @@
             else types.push({ type: 'C', hp: 1 + hpIncrease });
           }
           this.spawnInterval = 0.30;
-        } else if (waveNum <= 9) {
-          total = 12 + waveNum; // W7: 19, W8: 20, W9: 21
+        } else if (waveNum <= 7) {
+          total = 12 + waveNum; // W6: 18, W7: 19
           for (let i = 0; i < total; i++) {
             let r = Math.random();
             if (r < 0.4) types.push({ type: 'A', hp: 1 + hpIncrease });
@@ -2370,8 +2370,8 @@
             else types.push({ type: 'C', hp: 2 + hpIncrease });
           }
           this.spawnInterval = 0.28;
-        } else if (waveNum <= 15) {
-          total = 14 + waveNum; // W11-15
+        } else if (waveNum <= 12) {
+          total = 14 + waveNum; // W9-12
           for (let i = 0; i < total; i++) {
             let r = Math.random();
             if (r < 0.3) types.push({ type: 'A', hp: 2 + hpIncrease });
@@ -2379,8 +2379,8 @@
             else types.push({ type: 'C', hp: 3 + hpIncrease });
           }
           this.spawnInterval = 0.25;
-        } else if (waveNum <= 19) {
-          total = 15 + waveNum; // W16-19
+        } else if (waveNum <= 15) {
+          total = 15 + waveNum; // W13-15
           for (let i = 0; i < total; i++) {
             let r = Math.random();
             if (r < 0.2) types.push({ type: 'A', hp: 2 + hpIncrease });
@@ -2388,8 +2388,8 @@
             else types.push({ type: 'C', hp: 4 + hpIncrease });
           }
           this.spawnInterval = 0.23;
-        } else if (waveNum <= 25) {
-          total = 16 + waveNum; // W21-25
+        } else if (waveNum <= 20) {
+          total = 16 + waveNum; // W17-20
           for (let i = 0; i < total; i++) {
             let r = Math.random();
             if (r < 0.15) types.push({ type: 'A', hp: 3 + hpIncrease });
@@ -2398,7 +2398,7 @@
           }
           this.spawnInterval = 0.20;
         } else {
-          total = 18 + waveNum; // W26-29
+          total = 18 + waveNum; // W21-23
           for (let i = 0; i < total; i++) {
             let r = Math.random();
             if (r < 0.1) types.push({ type: 'A', hp: 4 + hpIncrease });
@@ -2855,7 +2855,7 @@
         }
       }
       audioEngine.playWaveClear();
-      if (waveManager.currentWave >= 30) {
+      if (waveManager.currentWave >= 24) {
         gameState = 'VICTORY';
         if (score > highscore) {
           highscore = score;
@@ -2906,7 +2906,7 @@
                 audioEngine.playEnemyExplosion();
                 score += enemy.scoreValue;
 
-                const isBossWave = (waveManager.currentWave === 10 || waveManager.currentWave === 20 || waveManager.currentWave === 30);
+                const isBossWave = (waveManager.currentWave === 8 || waveManager.currentWave === 16 || waveManager.currentWave === 24);
                 if (!enemy.isLeftover && !isBossWave) {
                   waveManager.enemiesDestroyed++;
                 }
@@ -3108,7 +3108,7 @@
 
       // 4. Wave Completion Failsafe (normal waves only)
       if (gameState === 'PLAYING' && waveManager.state === 'PLAYING') {
-        const isBossWave = (waveManager.currentWave === 10 || waveManager.currentWave === 20 || waveManager.currentWave === 30);
+        const isBossWave = (waveManager.currentWave === 8 || waveManager.currentWave === 16 || waveManager.currentWave === 24);
         if (!isBossWave) {
           if (waveManager.spawnQueue.length === 0) {
             const activeWaveEnemies = enemies.filter(e => !e.isLeftover && !e.type.startsWith('BOSS'));
