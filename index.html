@@ -641,9 +641,10 @@
     }
 
     class PowerUp {
-      constructor(x, y) {
+      constructor(x, y, type = 'WEAPON') {
         this.x = x;
         this.y = y;
+        this.type = type; // 'WEAPON' or 'SHIELD'
         this.width = 20;
         this.height = 20;
         this.speed = 95;
@@ -666,28 +667,53 @@
         const pulse = 1.0 + Math.sin(this.pulseTime) * 0.15;
         ctx.scale(pulse, pulse);
 
-        // Yellow powerup diamond with rotating outer borders
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = '#ffd700';
-        ctx.strokeStyle = '#ffd700';
-        ctx.lineWidth = 2;
-        ctx.fillStyle = 'rgba(255, 215, 0, 0.2)';
+        if (this.type === 'WEAPON') {
+          // Yellow powerup diamond with rotating outer borders
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = '#ffd700';
+          ctx.strokeStyle = '#ffd700';
+          ctx.lineWidth = 2;
+          ctx.fillStyle = 'rgba(255, 215, 0, 0.2)';
 
-        ctx.beginPath();
-        ctx.moveTo(0, -size);
-        ctx.lineTo(size, 0);
-        ctx.lineTo(0, size);
-        ctx.lineTo(-size, 0);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(0, -size);
+          ctx.lineTo(size, 0);
+          ctx.lineTo(0, size);
+          ctx.lineTo(-size, 0);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
 
-        ctx.font = 'bold 9px "Orbitron", monospace';
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowBlur = 0;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('W', 0, 0);
+          ctx.font = 'bold 9px "Orbitron", monospace';
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowBlur = 0;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('W', 0, 0);
+        } else {
+          // Blue-cyan hexagon for Shield powerup
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = '#00ffff';
+          ctx.strokeStyle = '#00ffff';
+          ctx.lineWidth = 2;
+          ctx.fillStyle = 'rgba(0, 255, 255, 0.2)';
+
+          ctx.beginPath();
+          for (let i = 0; i < 6; i++) {
+            const angle = i * Math.PI / 3 - Math.PI / 6;
+            ctx.lineTo(Math.cos(angle) * size, Math.sin(angle) * size);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.font = 'bold 9px "Orbitron", monospace';
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowBlur = 0;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('S', 0, 0);
+        }
 
         ctx.restore();
       }
@@ -701,9 +727,12 @@
         this.x = V_WIDTH / 2;
         this.y = V_HEIGHT - 80;
         this.targetX = V_WIDTH / 2;
+        this.targetY = V_HEIGHT - 80;
         this.lives = 3;
         this.invulnerable = false;
         this.invulnerableTimer = 0;
+        this.shieldActive = false;
+        this.shieldTimer = 0;
         this.shootTimer = 0;
         this.shootCooldown = 0.3; // 300ms
         this.speed = 10; // interpolation rate
@@ -714,15 +743,23 @@
         this.x = V_WIDTH / 2;
         this.y = V_HEIGHT - 80;
         this.targetX = V_WIDTH / 2;
+        this.targetY = V_HEIGHT - 80;
         this.lives = 3;
         this.invulnerable = false;
         this.invulnerableTimer = 0;
+        this.shieldActive = false;
+        this.shieldTimer = 0;
         this.shootTimer = 0;
         this.weaponLevel = 1;
       }
 
+      activateShield(duration) {
+        this.shieldActive = true;
+        this.shieldTimer = duration;
+      }
+
       triggerDamage() {
-        if (this.invulnerable) return false;
+        if (this.shieldActive || this.invulnerable) return false;
         this.lives--;
         audioEngine.playPlayerHit();
         if (this.lives > 0) {
@@ -733,19 +770,33 @@
       }
 
       update(dt, bullets) {
-        // Interpolate horizontal position
+        // Interpolate horizontal & vertical position
         this.x += (this.targetX - this.x) * this.speed * dt;
+        this.y += (this.targetY - this.y) * this.speed * dt;
         
         // Clamp boundaries
         const boundLimit = this.width / 2 + 10;
         if (this.x < boundLimit) this.x = boundLimit;
         if (this.x > V_WIDTH - boundLimit) this.x = V_WIDTH - boundLimit;
 
+        const boundLimitY = this.height / 2 + 10;
+        if (this.y < boundLimitY) this.y = boundLimitY;
+        if (this.y > V_HEIGHT - boundLimitY) this.y = V_HEIGHT - boundLimitY;
+
         // Manage Invulnerability
         if (this.invulnerable) {
           this.invulnerableTimer -= dt;
           if (this.invulnerableTimer <= 0) {
             this.invulnerable = false;
+          }
+        }
+
+        // Manage Shield
+        if (this.shieldActive) {
+          this.shieldTimer -= dt;
+          if (this.shieldTimer <= 0) {
+            this.shieldActive = false;
+            this.shieldTimer = 0;
           }
         }
 
@@ -970,6 +1021,23 @@
           ctx.beginPath();
           ctx.arc(0, 0, w * 0.95, 0, Math.PI * 2);
           ctx.stroke();
+        }
+
+        // 30-Second Shield Bubble (Cyan)
+        if (this.shieldActive) {
+          ctx.shadowBlur = 18;
+          ctx.shadowColor = '#00ffff';
+          ctx.strokeStyle = `rgba(0, 255, 255, ${0.6 + Math.sin(tick * 0.15) * 0.25})`;
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          ctx.arc(0, 0, w * 1.1, 0, Math.PI * 2);
+          ctx.stroke();
+          
+          // Soft fill
+          ctx.fillStyle = `rgba(0, 255, 255, ${0.08 + Math.sin(tick * 0.1) * 0.04})`;
+          ctx.beginPath();
+          ctx.arc(0, 0, w * 1.1, 0, Math.PI * 2);
+          ctx.fill();
         }
 
         ctx.restore();
@@ -1390,6 +1458,17 @@
         }
       }
 
+      // Shield Timer (if active)
+      if (player.shieldActive) {
+        ctx.font = `bold 10px 'Orbitron', monospace`;
+        ctx.fillStyle = '#00ffff';
+        ctx.shadowColor = '#00ffff';
+        ctx.shadowBlur = 4;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`SHIELD: ${Math.ceil(player.shieldTimer)}s`, 110, 25);
+      }
+
       // Wave Status
       ctx.font = `14px 'Orbitron', monospace`;
       ctx.fillStyle = '#8888ff';
@@ -1487,32 +1566,20 @@
       if (elapsed < 0.5) opacity = elapsed / 0.5;
       else if (timer < 0.5) opacity = timer / 0.5;
 
-      ctx.fillStyle = `rgba(8, 0, 25, ${opacity * 0.85})`;
-      ctx.fillRect(0, V_HEIGHT / 2 - 65, V_WIDTH, 130);
-
-      ctx.strokeStyle = `rgba(0, 255, 255, ${opacity * 0.4})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(0, V_HEIGHT / 2 - 65);
-      ctx.lineTo(V_WIDTH, V_HEIGHT / 2 - 65);
-      ctx.moveTo(0, V_HEIGHT / 2 + 65);
-      ctx.lineTo(V_WIDTH, V_HEIGHT / 2 + 65);
-      ctx.stroke();
-
       ctx.globalAlpha = opacity;
-      ctx.font = `bold 30px 'Orbitron', sans-serif`;
+      ctx.font = `bold 28px 'Orbitron', sans-serif`;
       ctx.fillStyle = '#00ffff';
       ctx.shadowColor = '#00ffff';
-      ctx.shadowBlur = 18;
+      ctx.shadowBlur = 15;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(`WAVE ${waveNum}`, V_WIDTH / 2, V_HEIGHT / 2 - 16);
+      ctx.fillText(`WAVE ${waveNum}`, V_WIDTH / 2, V_HEIGHT / 2 - 10);
 
-      ctx.font = `12px 'Orbitron', sans-serif`;
+      ctx.font = `11px 'Orbitron', sans-serif`;
       ctx.fillStyle = '#39ff14';
       ctx.shadowColor = '#39ff14';
-      ctx.shadowBlur = 6;
-      ctx.fillText(`PREPARE FLIGHT SYSTEM`, V_WIDTH / 2, V_HEIGHT / 2 + 24);
+      ctx.shadowBlur = 5;
+      ctx.fillText(`PREPARAR SISTEMA DE VOO`, V_WIDTH / 2, V_HEIGHT / 2 + 20);
 
       ctx.restore();
     }
@@ -1554,14 +1621,21 @@
         
         if (bullet.isEnemy) {
           // Check player collision
-          if (!player.invulnerable && gameState === 'PLAYING') {
+          if (gameState === 'PLAYING') {
             const hitRadius = Math.max(player.width, player.height) * 0.45;
             const dist = Math.hypot(bullet.x - player.x, bullet.y - player.y);
             if (dist < hitRadius + 3) {
               bullet.active = false;
-              const hit = player.triggerDamage();
-              if (hit) waveManager.waveDamageTaken = true;
-              if (player.lives <= 0) triggerGameOver();
+              if (!player.invulnerable && !player.shieldActive) {
+                const hit = player.triggerDamage();
+                if (hit) waveManager.waveDamageTaken = true;
+                if (player.lives <= 0) triggerGameOver();
+              } else if (player.shieldActive) {
+                // Shield impact particles
+                for (let i = 0; i < 5; i++) {
+                  particles.push(new Particle(bullet.x, bullet.y, '#00ffff'));
+                }
+              }
             }
           }
         } else {
@@ -1583,7 +1657,8 @@
                 // Collectible items spawned on even waves (onda sim, onda não)
                 const isEvenWave = (waveManager.currentWave % 2 === 0);
                 if (isEvenWave && Math.random() < 0.22) { // 22% chance of drop
-                  powerups.push(new PowerUp(enemy.x, enemy.y));
+                  const type = Math.random() < 0.5 ? 'WEAPON' : 'SHIELD';
+                  powerups.push(new PowerUp(enemy.x, enemy.y, type));
                 }
 
                 // Spawn explosion particles
@@ -1612,7 +1687,7 @@
       }
 
       // 2. Direct player ship collision with enemy bodies
-      if (!player.invulnerable && gameState === 'PLAYING') {
+      if (gameState === 'PLAYING') {
         for (let e = enemies.length - 1; e >= 0; e--) {
           const enemy = enemies[e];
           const hitRadius = Math.max(player.width, player.height) * 0.45;
@@ -1620,8 +1695,15 @@
           const dist = Math.hypot(player.x - enemy.x, player.y - enemy.y);
           
           if (dist < hitRadius + enemyRadius) {
-            const hit = player.triggerDamage();
-            if (hit) waveManager.waveDamageTaken = true;
+            if (!player.invulnerable && !player.shieldActive) {
+              const hit = player.triggerDamage();
+              if (hit) waveManager.waveDamageTaken = true;
+            } else if (player.shieldActive) {
+              // Shield block particles
+              for (let i = 0; i < 8; i++) {
+                particles.push(new Particle(enemy.x, enemy.y, '#00ffff'));
+              }
+            }
             
             // Re-bound enemy damage and destroy
             enemy.active = false;
@@ -1631,7 +1713,8 @@
             // Collectible items spawned on even waves (onda sim, onda não)
             const isEvenWave = (waveManager.currentWave % 2 === 0);
             if (isEvenWave && Math.random() < 0.22) {
-              powerups.push(new PowerUp(enemy.x, enemy.y));
+              const type = Math.random() < 0.5 ? 'WEAPON' : 'SHIELD';
+              powerups.push(new PowerUp(enemy.x, enemy.y, type));
             }
 
             for (let i = 0; i < 12; i++) {
@@ -1667,8 +1750,13 @@
           
           if (dist < colLimit) {
             pu.active = false;
-            if (player.weaponLevel < 3) {
-              player.weaponLevel++;
+            if (pu.type === 'WEAPON') {
+              if (player.weaponLevel < 3) {
+                player.weaponLevel++;
+                audioEngine.playPowerUp();
+              }
+            } else if (pu.type === 'SHIELD') {
+              player.activateShield(30);
               audioEngine.playPowerUp();
             }
             score += 15;
@@ -1842,9 +1930,10 @@
     }
 
     function handleMove(clientX, clientY) {
-      const { x } = convertCoords(clientX, clientY);
+      const { x, y } = convertCoords(clientX, clientY);
       if (gameState === 'PLAYING') {
         player.targetX = x;
+        player.targetY = y;
       }
     }
 
@@ -1868,6 +1957,12 @@
       }
       if (keys['ArrowRight'] || keys['d'] || keys['D']) {
         player.targetX = player.x + moveSpeed;
+      }
+      if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+        player.targetY = player.y - moveSpeed;
+      }
+      if (keys['ArrowDown'] || keys['s'] || keys['S']) {
+        player.targetY = player.y + moveSpeed;
       }
     }
     // inject into request loop cycle
@@ -1896,6 +1991,7 @@
         
         if (gameState === 'PLAYING') {
           player.targetX = x;
+          player.targetY = y;
         } else if (gameState === 'MENU') {
           if (isInside(x, y, buttons.startButton)) startGame();
         } else if (gameState === 'GAME_OVER') {
