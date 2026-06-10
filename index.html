@@ -62,12 +62,117 @@
       text-transform: uppercase;
       text-shadow: 0 0 5px rgba(0, 255, 255, 0.2);
     }
+
+    /* ===== NAME INPUT OVERLAY ===== */
+    #nameInputOverlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(5, 0, 16, 0.98);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      font-family: 'Orbitron', monospace;
+    }
+    #nameInputOverlay .overlay-title {
+      color: #00ffff;
+      font-size: clamp(18px, 5vw, 28px);
+      letter-spacing: 6px;
+      text-shadow: 0 0 25px #00ffff, 0 0 50px rgba(0,255,255,0.3);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+    #nameInputOverlay .overlay-subtitle {
+      color: #8888ff;
+      font-size: clamp(9px, 2.5vw, 13px);
+      letter-spacing: 4px;
+      margin-bottom: 36px;
+    }
+    #nameInputOverlay .input-label {
+      color: #aaaaff;
+      font-size: clamp(8px, 2vw, 11px);
+      letter-spacing: 4px;
+      margin-bottom: 14px;
+      text-transform: uppercase;
+    }
+    #playerNameInput {
+      background: rgba(0, 255, 255, 0.04);
+      border: 2px solid #00ffff;
+      border-radius: 3px;
+      color: #ffffff;
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(14px, 4vw, 20px);
+      letter-spacing: 5px;
+      padding: 14px 22px;
+      text-align: center;
+      width: min(300px, 80vw);
+      outline: none;
+      box-shadow: 0 0 25px rgba(0, 255, 255, 0.25), inset 0 0 15px rgba(0,255,255,0.03);
+      margin-bottom: 30px;
+      text-transform: uppercase;
+      caret-color: #00ffff;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+    #playerNameInput::placeholder { color: rgba(0,255,255,0.25); }
+    #playerNameInput:focus {
+      border-color: #39ff14;
+      box-shadow: 0 0 35px rgba(57,255,20,0.4), inset 0 0 15px rgba(57,255,20,0.05);
+    }
+    #confirmNameBtn {
+      background: transparent;
+      border: 2px solid #39ff14;
+      border-radius: 3px;
+      color: #39ff14;
+      cursor: pointer;
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(10px, 3vw, 14px);
+      letter-spacing: 5px;
+      padding: 14px 44px;
+      text-transform: uppercase;
+      box-shadow: 0 0 18px rgba(57,255,20,0.3);
+      transition: all 0.2s;
+    }
+    #confirmNameBtn:hover, #confirmNameBtn:active {
+      background: rgba(57,255,20,0.12);
+      box-shadow: 0 0 35px rgba(57,255,20,0.6);
+    }
+    .overlay-glow-line {
+      width: min(280px, 75vw);
+      height: 1px;
+      background: linear-gradient(90deg, transparent, #00ffff, transparent);
+      margin: 22px 0;
+      opacity: 0.6;
+    }
+    #nameInputError {
+      color: #ff0055;
+      font-size: 9px;
+      letter-spacing: 2px;
+      margin-top: -20px;
+      margin-bottom: 16px;
+      min-height: 14px;
+    }
   </style>
 </head>
 <body>
   <canvas id="gameCanvas"></canvas>
   <div id="audioNotice">CLIQUE OU TOQUE NA TELA PARA ATIVAR O SOM SINTETIZADO</div>
   <div id="footerNotice">Criado por Mateus Cruz</div>
+
+  <!-- Name Input Overlay -->
+  <div id="nameInputOverlay">
+    <div class="overlay-title">INTERGALACTIC NEON</div>
+    <div class="overlay-subtitle">S P A C E &nbsp; S H O O T E R</div>
+    <div class="overlay-glow-line"></div>
+    <div class="input-label">Identificação do piloto</div>
+    <input id="playerNameInput" type="text" maxlength="12"
+      placeholder="SEU NOME" autocomplete="off" autocorrect="off"
+      autocapitalize="characters" spellcheck="false" />
+    <div id="nameInputError"></div>
+    <button id="confirmNameBtn">ENTRAR</button>
+    <div class="overlay-glow-line"></div>
+  </div>
 
   <script>
     // --- UTILS & CORE SETTINGS ---
@@ -80,10 +185,130 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
-    let gameState = 'MENU'; // MENU, PLAYING, WAVE_CLEAR, GAME_OVER
+    let gameState = 'MENU'; // MENU, PLAYING, GAME_OVER, VICTORY, LEADERBOARD
     let score = 0;
     let highscore = parseInt(localStorage.getItem('intergalactic_neon_highscore') || '0', 10);
     let tick = 0;
+
+    // --- PLAYER IDENTITY & LEADERBOARD ---
+    let playerName = localStorage.getItem('ig_neon_playername') || '';
+    let playerIP = 'unknown';
+    let leaderboard = [];
+    let leaderboardLoaded = false;
+    let leaderboardError = false;
+    let scoreSaved = false;
+
+    const JSONBIN_API_KEY = '$2a$10$N6l9Rvj6RAqZ8GFgi0okK.lhg2M/r1puSG4KleYm6rtaFyAQdesaq';
+    const JSONBIN_BASE = 'https://api.jsonbin.io/v3';
+    let LEADERBOARD_BIN_ID = localStorage.getItem('ig_neon_bin_id') || null;
+
+    async function fetchPlayerIP() {
+      try {
+        const res = await fetch('https://api.ipify.org?format=json');
+        const data = await res.json();
+        playerIP = data.ip;
+      } catch (e) {
+        playerIP = 'local_' + (localStorage.getItem('ig_neon_uid') || (() => {
+          const uid = Math.random().toString(36).substr(2, 10);
+          localStorage.setItem('ig_neon_uid', uid);
+          return uid;
+        })());
+      }
+    }
+
+    async function initLeaderboardBin() {
+      if (LEADERBOARD_BIN_ID) return;
+      try {
+        const res = await fetch(`${JSONBIN_BASE}/b`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Access-Key': JSONBIN_API_KEY,
+            'X-Bin-Name': 'intergalactic_neon_ranking',
+            'X-Bin-Private': 'false'
+          },
+          body: JSON.stringify([])
+        });
+        const data = await res.json();
+        if (data.metadata && data.metadata.id) {
+          LEADERBOARD_BIN_ID = data.metadata.id;
+          localStorage.setItem('ig_neon_bin_id', LEADERBOARD_BIN_ID);
+        }
+      } catch (e) {
+        console.warn('Leaderboard bin creation failed:', e);
+      }
+    }
+
+    async function loadLeaderboard() {
+      leaderboardLoaded = false;
+      leaderboardError = false;
+      if (!LEADERBOARD_BIN_ID) {
+        leaderboard = [];
+        leaderboardLoaded = true;
+        return;
+      }
+      try {
+        const res = await fetch(`${JSONBIN_BASE}/b/${LEADERBOARD_BIN_ID}/latest`, {
+          headers: { 'X-Access-Key': JSONBIN_API_KEY }
+        });
+        const data = await res.json();
+        leaderboard = Array.isArray(data.record) ? data.record : [];
+        leaderboardLoaded = true;
+      } catch (e) {
+        leaderboard = [];
+        leaderboardError = true;
+        leaderboardLoaded = true;
+      }
+    }
+
+    async function saveScore(name, finalScore, wave) {
+      if (!LEADERBOARD_BIN_ID || scoreSaved) return;
+      scoreSaved = true;
+      try {
+        const res = await fetch(`${JSONBIN_BASE}/b/${LEADERBOARD_BIN_ID}/latest`, {
+          headers: { 'X-Access-Key': JSONBIN_API_KEY }
+        });
+        const data = await res.json();
+        let records = Array.isArray(data.record) ? data.record : [];
+
+        const existingIdx = records.findIndex(r => r.ip === playerIP);
+        const newEntry = {
+          name: (name || 'PILOTO').toUpperCase().substring(0, 12),
+          score: finalScore,
+          wave: wave,
+          ip: playerIP,
+          date: new Date().toLocaleDateString('pt-BR')
+        };
+
+        if (existingIdx >= 0) {
+          if (finalScore > records[existingIdx].score) {
+            records[existingIdx] = newEntry;
+          }
+        } else {
+          records.push(newEntry);
+        }
+
+        records.sort((a, b) => b.score - a.score);
+        records = records.slice(0, 100);
+
+        await fetch(`${JSONBIN_BASE}/b/${LEADERBOARD_BIN_ID}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Access-Key': JSONBIN_API_KEY
+          },
+          body: JSON.stringify(records)
+        });
+
+        leaderboard = records;
+      } catch (e) {
+        console.warn('Score save failed:', e);
+      }
+    }
+
+    // Boot: fetch IP and init bin
+    fetchPlayerIP();
+    initLeaderboardBin();
 
     // --- PROCEDURAL AUDIO ENGINE ---
     class AudioEngine {
@@ -1723,10 +1948,13 @@
       startWave(waveNum) {
         if (waveNum > 30) {
           gameState = 'VICTORY';
+          scoreSaved = false;
           if (score > highscore) {
             highscore = score;
             localStorage.setItem('intergalactic_neon_highscore', highscore.toString());
           }
+          saveScore(playerName, score, 30);
+          loadLeaderboard();
           return;
         }
 
@@ -1904,6 +2132,8 @@
       startButton: { text: "START GAME", x: 0, y: 0, w: 0, h: 0, hover: false },
       restartButton: { text: "RESTART", x: 0, y: 0, w: 0, h: 0, hover: false },
       menuButton: { text: "MENU", x: 0, y: 0, w: 0, h: 0, hover: false },
+      rankingButton: { text: "RANKING", x: 0, y: 0, w: 0, h: 0, hover: false },
+      leaderboardButton: { text: "VER RANKING", x: 0, y: 0, w: 0, h: 0, hover: false },
       muteButton: { x: V_WIDTH - 150, y: 13, w: 24, h: 24, hover: false }
     };
 
@@ -1931,11 +2161,14 @@
 
     function triggerGameOver() {
       gameState = 'GAME_OVER';
+      scoreSaved = false;
       audioEngine.playGameOver();
       if (score > highscore) {
         highscore = score;
         localStorage.setItem('intergalactic_neon_highscore', highscore.toString());
       }
+      saveScore(playerName, score, waveManager.currentWave);
+      loadLeaderboard();
     }
 
     // --- VISUAL RENDERING ROUTINES ---
@@ -2559,7 +2792,18 @@
         ctx.textAlign = 'center';
         ctx.fillText("DEFEND THE GALAXY", V_WIDTH / 2, 308);
 
-        drawButton(ctx, buttons.startButton, V_WIDTH / 2, 430, 210, 48);
+        // Show pilot name if set
+        if (playerName) {
+          ctx.font = `9px 'Orbitron', sans-serif`;
+          ctx.fillStyle = 'rgba(0, 255, 255, 0.6)';
+          ctx.shadowColor = '#00ffff';
+          ctx.shadowBlur = 4;
+          ctx.fillText(`PILOTO: ${playerName}`, V_WIDTH / 2, 355);
+        }
+
+        drawButton(ctx, buttons.startButton, V_WIDTH / 2, 410, 210, 48);
+        buttons.rankingButton.text = 'RANKING';
+        drawButton(ctx, buttons.rankingButton, V_WIDTH / 2, 478, 210, 42);
         drawPlayableBorders(ctx);
 
       } else if (gameState === 'GAME_OVER') {
@@ -2568,19 +2812,31 @@
         particles = particles.filter(p => p.life > 0);
         particles.forEach(p => p.draw(ctx));
 
-        drawGlitchText(ctx, "GAME OVER", V_WIDTH / 2, 230, 36, scale);
+        drawGlitchText(ctx, "GAME OVER", V_WIDTH / 2, 200, 36, scale);
 
         ctx.font = `15px 'Orbitron', sans-serif`;
         ctx.fillStyle = '#39ff14';
         ctx.textAlign = 'center';
         ctx.shadowBlur = 6;
-        ctx.fillText(`SCORE: ${score}`, V_WIDTH / 2, 305);
+        ctx.shadowColor = '#39ff14';
+        ctx.fillText(`SCORE: ${score}`, V_WIDTH / 2, 270);
         
         ctx.fillStyle = '#00ffff';
-        ctx.fillText(`HIGH SCORE: ${highscore}`, V_WIDTH / 2, 340);
+        ctx.shadowColor = '#00ffff';
+        ctx.fillText(`HIGH SCORE: ${highscore}`, V_WIDTH / 2, 302);
 
-        drawButton(ctx, buttons.restartButton, V_WIDTH / 2, 450, 170, 45);
-        drawButton(ctx, buttons.menuButton, V_WIDTH / 2, 515, 170, 45);
+        // Saving indicator
+        ctx.font = `8px 'Orbitron', sans-serif`;
+        ctx.fillStyle = scoreSaved ? 'rgba(57,255,20,0.7)' : 'rgba(255,200,0,0.7)';
+        ctx.shadowBlur = 0;
+        ctx.fillText(scoreSaved ? '✓ PONTUACAO SALVA NO RANKING' : 'SALVANDO PONTUACAO...', V_WIDTH / 2, 328);
+
+        buttons.restartButton.text = 'RESTART';
+        buttons.menuButton.text = 'MENU';
+        buttons.leaderboardButton.text = 'VER RANKING';
+        drawButton(ctx, buttons.restartButton, V_WIDTH / 2, 390, 170, 42);
+        drawButton(ctx, buttons.leaderboardButton, V_WIDTH / 2, 450, 180, 42);
+        drawButton(ctx, buttons.menuButton, V_WIDTH / 2, 510, 170, 42);
         drawPlayableBorders(ctx);
       } else if (gameState === 'VICTORY') {
         // Render background particles
@@ -2588,26 +2844,158 @@
         particles = particles.filter(p => p.life > 0);
         particles.forEach(p => p.draw(ctx));
 
-        drawGlitchText(ctx, "VICTORY", V_WIDTH / 2, 230, 40, scale);
+        drawGlitchText(ctx, "VICTORY", V_WIDTH / 2, 200, 40, scale);
         
         ctx.font = `bold 16px 'Orbitron', sans-serif`;
         ctx.fillStyle = '#ffd700';
         ctx.textAlign = 'center';
         ctx.shadowBlur = 10;
         ctx.shadowColor = '#ffd700';
-        ctx.fillText("VOCE SALVOU A GALAXIA!", V_WIDTH / 2, 290);
+        ctx.fillText("VOCE SALVOU A GALAXIA!", V_WIDTH / 2, 265);
 
         ctx.font = `14px 'Orbitron', sans-serif`;
         ctx.fillStyle = '#39ff14';
         ctx.shadowColor = '#39ff14';
         ctx.shadowBlur = 6;
-        ctx.fillText(`SCORE FINAL: ${score}`, V_WIDTH / 2, 335);
+        ctx.fillText(`SCORE FINAL: ${score}`, V_WIDTH / 2, 305);
 
         ctx.fillStyle = '#00ffff';
-        ctx.fillText(`RECORD: ${highscore}`, V_WIDTH / 2, 370);
+        ctx.shadowColor = '#00ffff';
+        ctx.fillText(`RECORD: ${highscore}`, V_WIDTH / 2, 335);
 
-        drawButton(ctx, buttons.restartButton, V_WIDTH / 2, 470, 170, 45);
-        drawButton(ctx, buttons.menuButton, V_WIDTH / 2, 535, 170, 45);
+        ctx.font = `8px 'Orbitron', sans-serif`;
+        ctx.fillStyle = scoreSaved ? 'rgba(57,255,20,0.7)' : 'rgba(255,200,0,0.7)';
+        ctx.shadowBlur = 0;
+        ctx.fillText(scoreSaved ? '✓ PONTUACAO SALVA NO RANKING' : 'SALVANDO PONTUACAO...', V_WIDTH / 2, 360);
+
+        buttons.restartButton.text = 'RESTART';
+        buttons.menuButton.text = 'MENU';
+        buttons.leaderboardButton.text = 'VER RANKING';
+        drawButton(ctx, buttons.restartButton, V_WIDTH / 2, 415, 170, 42);
+        drawButton(ctx, buttons.leaderboardButton, V_WIDTH / 2, 472, 180, 42);
+        drawButton(ctx, buttons.menuButton, V_WIDTH / 2, 530, 170, 42);
+        drawPlayableBorders(ctx);
+      } else if (gameState === 'LEADERBOARD') {
+        // Render leaderboard screen
+        ctx.fillStyle = 'rgba(5, 0, 25, 0.92)';
+        ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
+
+        drawGlitchText(ctx, 'RANKING', V_WIDTH / 2, 60, 30, scale);
+
+        ctx.font = `bold 9px 'Orbitron', monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#8888ff';
+        ctx.shadowBlur = 0;
+        ctx.fillText('TOP PILOTOS INTERGALACTICOS', V_WIDTH / 2, 92);
+
+        const grad = ctx.createLinearGradient(30, 108, V_WIDTH - 30, 108);
+        grad.addColorStop(0, 'transparent');
+        grad.addColorStop(0.5, '#00ffff');
+        grad.addColorStop(1, 'transparent');
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(30, 108);
+        ctx.lineTo(V_WIDTH - 30, 108);
+        ctx.stroke();
+
+        if (!leaderboardLoaded) {
+          ctx.font = `11px 'Orbitron', monospace`;
+          ctx.fillStyle = '#00ffff';
+          ctx.shadowColor = '#00ffff';
+          ctx.shadowBlur = 8;
+          ctx.textAlign = 'center';
+          ctx.fillText('CARREGANDO...', V_WIDTH / 2, V_HEIGHT / 2);
+        } else if (leaderboardError || leaderboard.length === 0) {
+          ctx.font = `10px 'Orbitron', monospace`;
+          ctx.fillStyle = leaderboardError ? '#ff0055' : '#8888ff';
+          ctx.shadowBlur = 0;
+          ctx.textAlign = 'center';
+          ctx.fillText(leaderboardError ? 'ERRO AO CARREGAR RANKING' : 'NENHUM PILOTO REGISTRADO', V_WIDTH / 2, V_HEIGHT / 2 - 10);
+          ctx.font = `8px 'Orbitron', monospace`;
+          ctx.fillStyle = '#555588';
+          ctx.fillText(leaderboardError ? 'VERIFIQUE A CONEXAO' : 'SEJA O PRIMEIRO!', V_WIDTH / 2, V_HEIGHT / 2 + 18);
+        } else {
+          const topEntries = leaderboard.slice(0, 10);
+          const startY = 128;
+          const rowH = 46;
+
+          ctx.font = `bold 8px 'Orbitron', monospace`;
+          ctx.fillStyle = '#444466';
+          ctx.textAlign = 'left';
+          ctx.shadowBlur = 0;
+          ctx.fillText('#', 26, startY);
+          ctx.fillText('PILOTO', 58, startY);
+          ctx.textAlign = 'center';
+          ctx.fillText('ONDA', V_WIDTH - 85, startY);
+          ctx.textAlign = 'right';
+          ctx.fillText('PONTOS', V_WIDTH - 20, startY);
+
+          topEntries.forEach((entry, i) => {
+            const y = startY + 20 + i * rowH;
+            const isPlayer = entry.ip === playerIP;
+
+            if (isPlayer) {
+              ctx.fillStyle = 'rgba(0, 255, 255, 0.07)';
+              ctx.fillRect(18, y - 15, V_WIDTH - 36, rowH - 4);
+              ctx.strokeStyle = 'rgba(0, 255, 255, 0.22)';
+              ctx.lineWidth = 1;
+              ctx.strokeRect(18, y - 15, V_WIDTH - 36, rowH - 4);
+            }
+
+            let rankColor = '#444466';
+            if (i === 0) rankColor = '#ffd700';
+            else if (i === 1) rankColor = '#c0c0c0';
+            else if (i === 2) rankColor = '#cd7f32';
+
+            ctx.font = `bold 11px 'Orbitron', monospace`;
+            ctx.fillStyle = rankColor;
+            ctx.shadowColor = rankColor;
+            ctx.shadowBlur = i < 3 ? 8 : 0;
+            ctx.textAlign = 'center';
+            ctx.fillText(`${i + 1}`, 32, y);
+
+            ctx.font = `bold 12px 'Orbitron', monospace`;
+            ctx.fillStyle = isPlayer ? '#00ffff' : '#ffffff';
+            ctx.shadowColor = isPlayer ? '#00ffff' : 'transparent';
+            ctx.shadowBlur = isPlayer ? 8 : 0;
+            ctx.textAlign = 'left';
+            ctx.fillText(entry.name.substring(0, 10), 58, y);
+
+            if (isPlayer) {
+              ctx.font = `7px 'Orbitron', monospace`;
+              ctx.fillStyle = 'rgba(0,255,255,0.7)';
+              ctx.shadowBlur = 3;
+              ctx.fillText('< VOCE', 58, y + 13);
+            }
+
+            ctx.font = `10px 'Orbitron', monospace`;
+            ctx.fillStyle = '#8888ff';
+            ctx.shadowBlur = 0;
+            ctx.textAlign = 'center';
+            ctx.fillText(`W${entry.wave || '-'}`, V_WIDTH - 85, y);
+
+            ctx.font = `bold 12px 'Orbitron', monospace`;
+            ctx.fillStyle = i === 0 ? '#ffd700' : '#39ff14';
+            ctx.shadowColor = i === 0 ? '#ffd700' : '#39ff14';
+            ctx.shadowBlur = 5;
+            ctx.textAlign = 'right';
+            ctx.fillText(entry.score.toString().padStart(6, '0'), V_WIDTH - 20, y);
+            ctx.shadowBlur = 0;
+
+            if (i < topEntries.length - 1) {
+              ctx.strokeStyle = 'rgba(80, 80, 130, 0.2)';
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.moveTo(22, y + 19);
+              ctx.lineTo(V_WIDTH - 22, y + 19);
+              ctx.stroke();
+            }
+          });
+        }
+
+        buttons.menuButton.text = 'VOLTAR';
+        drawButton(ctx, buttons.menuButton, V_WIDTH / 2, V_HEIGHT - 55, 180, 42);
         drawPlayableBorders(ctx);
       }
       
@@ -2698,8 +3086,12 @@
 
       if (gameState === 'MENU') {
         buttons.startButton.hover = isInside(x, y, buttons.startButton);
+        buttons.rankingButton.hover = isInside(x, y, buttons.rankingButton);
       } else if (gameState === 'GAME_OVER' || gameState === 'VICTORY') {
         buttons.restartButton.hover = isInside(x, y, buttons.restartButton);
+        buttons.menuButton.hover = isInside(x, y, buttons.menuButton);
+        buttons.leaderboardButton.hover = isInside(x, y, buttons.leaderboardButton);
+      } else if (gameState === 'LEADERBOARD') {
         buttons.menuButton.hover = isInside(x, y, buttons.menuButton);
       }
       handleMove(e.clientX, e.clientY);
@@ -2724,9 +3116,17 @@
           player.targetY = y;
         } else if (gameState === 'MENU') {
           if (isInside(x, y, buttons.startButton)) startGame();
+          else if (isInside(x, y, buttons.rankingButton)) {
+            leaderboardLoaded = false;
+            loadLeaderboard();
+            gameState = 'LEADERBOARD';
+          }
         } else if (gameState === 'GAME_OVER' || gameState === 'VICTORY') {
           if (isInside(x, y, buttons.restartButton)) startGame();
+          else if (isInside(x, y, buttons.leaderboardButton)) gameState = 'LEADERBOARD';
           else if (isInside(x, y, buttons.menuButton)) goToMenu();
+        } else if (gameState === 'LEADERBOARD') {
+          if (isInside(x, y, buttons.menuButton)) goToMenu();
         }
       }
     }, { passive: false });
@@ -2751,15 +3151,64 @@
 
       if (gameState === 'MENU') {
         if (isInside(x, y, buttons.startButton)) startGame();
+        else if (isInside(x, y, buttons.rankingButton)) {
+          leaderboardLoaded = false;
+          loadLeaderboard();
+          gameState = 'LEADERBOARD';
+        }
       } else if (gameState === 'GAME_OVER' || gameState === 'VICTORY') {
         if (isInside(x, y, buttons.restartButton)) startGame();
+        else if (isInside(x, y, buttons.leaderboardButton)) gameState = 'LEADERBOARD';
         else if (isInside(x, y, buttons.menuButton)) goToMenu();
+      } else if (gameState === 'LEADERBOARD') {
+        if (isInside(x, y, buttons.menuButton)) goToMenu();
       }
     });
 
     // Launch application sequence
     resize();
     requestAnimationFrame(loop);
+
+    // --- NAME INPUT OVERLAY LOGIC ---
+    (function() {
+      const overlay = document.getElementById('nameInputOverlay');
+      const input = document.getElementById('playerNameInput');
+      const confirmBtn = document.getElementById('confirmNameBtn');
+      const errorEl = document.getElementById('nameInputError');
+
+      // If player name already saved, skip overlay
+      if (playerName && playerName.length > 0) {
+        overlay.style.display = 'none';
+      } else {
+        // Prevent canvas touch-action while overlay is visible
+        overlay.style.touchAction = 'auto';
+        setTimeout(() => input.focus(), 400);
+      }
+
+      function confirmName() {
+        const name = input.value.trim().toUpperCase();
+        if (name.length === 0) {
+          errorEl.textContent = 'NOME OBRIGATORIO!';
+          input.style.borderColor = '#ff0055';
+          input.style.boxShadow = '0 0 25px rgba(255,0,85,0.4)';
+          setTimeout(() => input.focus(), 100);
+          return;
+        }
+        playerName = name;
+        localStorage.setItem('ig_neon_playername', playerName);
+        overlay.style.display = 'none';
+        audioEngine.init();
+        audioEngine.resume();
+      }
+
+      confirmBtn.addEventListener('click', confirmName);
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); confirmName(); }
+        errorEl.textContent = '';
+        input.style.borderColor = '';
+        input.style.boxShadow = '';
+      });
+    })();
   </script>
 </body>
 </html>
