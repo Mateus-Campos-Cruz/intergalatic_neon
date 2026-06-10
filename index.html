@@ -590,6 +590,69 @@
           osc.stop(startTime + 0.25);
         });
       }
+
+      playShieldDeflect() {
+        if (!this.initialized) return;
+        this.resume();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gainNode = this.ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(500, now);
+        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.08);
+
+        gainNode.gain.setValueAtTime(0.12, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+        osc.connect(gainNode);
+        gainNode.connect(this.masterGain);
+
+        osc.start(now);
+        osc.stop(now + 0.1);
+      }
+
+      playForcefieldOn() {
+        if (!this.initialized) return;
+        this.resume();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gainNode = this.ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(140, now);
+        osc.frequency.exponentialRampToValueAtTime(440, now + 0.25);
+
+        gainNode.gain.setValueAtTime(0.16, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+        osc.connect(gainNode);
+        gainNode.connect(this.masterGain);
+
+        osc.start(now);
+        osc.stop(now + 0.3);
+      }
+
+      playForcefieldOff() {
+        if (!this.initialized) return;
+        this.resume();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gainNode = this.ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.exponentialRampToValueAtTime(140, now + 0.2);
+
+        gainNode.gain.setValueAtTime(0.14, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+        osc.connect(gainNode);
+        gainNode.connect(this.masterGain);
+
+        osc.start(now);
+        osc.stop(now + 0.25);
+      }
     }
 
     const audioEngine = new AudioEngine();
@@ -1937,115 +2000,319 @@
       ctx.restore();
     }
 
-    function drawBoss3(ctx, x, y, size, pulse) {
+    function drawBoss3(ctx, x, y, size, pulse, forcefieldActive) {
       ctx.save();
       ctx.translate(x, y);
       ctx.scale(pulse, pulse);
-      ctx.shadowBlur = 25;
-      ctx.shadowColor = '#39ff14';
-      ctx.strokeStyle = '#39ff14';
-      ctx.lineWidth = 3.5;
 
-      // 1. Central Body (Diamond shape)
-      ctx.fillStyle = 'rgba(57, 255, 20, 0.15)';
+      // 1. Forcefield Bubble (if active)
+      if (forcefieldActive) {
+        ctx.save();
+        ctx.shadowBlur = 25;
+        ctx.shadowColor = '#00ffff';
+        ctx.strokeStyle = `rgba(0, 240, 255, ${0.7 + Math.sin(tick * 0.2) * 0.25})`;
+        ctx.lineWidth = 4;
+        ctx.fillStyle = `rgba(0, 200, 255, ${0.07 + Math.sin(tick * 0.1) * 0.03})`;
+        
+        ctx.beginPath();
+        ctx.arc(0, -size * 0.2, size * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Hexagonal/grid patterns inside shield
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.18)';
+        ctx.lineWidth = 1;
+        for (let a = 0; a < Math.PI * 2; a += Math.PI / 6) {
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a) * (size * 2.0), Math.sin(a) * (size * 2.0));
+          ctx.lineTo(Math.cos(a) * (size * 2.5), Math.sin(a) * (size * 2.5));
+          ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.arc(0, -size * 0.2, size * 2.0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 2. Legs (8 legs, 4 on each side)
+      ctx.save();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#00aeff';
+      ctx.shadowColor = '#00aeff';
+      ctx.shadowBlur = 10;
+      
+      const legSides = [-1, 1];
+      legSides.forEach(side => {
+        for (let l = 0; l < 4; l++) {
+          // Base attachment point on the body
+          let baseY = -size * 0.35 + l * (size * 0.15);
+          let baseX = side * size * 0.4;
+          
+          // Joint 1: going outwards and upwards
+          let j1x = baseX + side * size * (0.5 + l * 0.08);
+          let j1y = baseY - size * (0.2 + l * 0.04);
+          
+          // Joint 2: bending downwards
+          let j2x = j1x + side * size * (0.35 + l * 0.04);
+          let j2y = j1y + size * 0.25;
+          
+          // Tip: pointing down and outwards
+          let tipX = j2x + side * size * 0.15;
+          let tipY = j2y + size * 0.45;
+          
+          ctx.beginPath();
+          ctx.moveTo(baseX, baseY);
+          ctx.lineTo(j1x, j1y);
+          ctx.lineTo(j2x, j2y);
+          ctx.lineTo(tipX, tipY);
+          ctx.stroke();
+          
+          // Glowing joints
+          ctx.fillStyle = '#00ffff';
+          ctx.beginPath();
+          ctx.arc(j1x, j1y, 2.5, 0, Math.PI * 2);
+          ctx.arc(j2x, j2y, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+      ctx.restore();
+
+      // 3. Tail Loop & Stinger
+      // Define path for the tail curving up from the top of the body (0, -size*0.5)
+      const tailPoints = [];
+      const numSegments = 14;
+      for (let i = 0; i < numSegments; i++) {
+        let t = i / (numSegments - 1);
+        let px, py;
+        if (t < 0.25) {
+          let nt = t / 0.25;
+          px = nt * (size * 0.6);
+          py = -size * 0.5 - nt * (size * 0.3);
+        } else if (t < 0.5) {
+          let nt = (t - 0.25) / 0.25;
+          px = size * 0.6 + nt * (size * 0.15);
+          py = -size * 0.8 - nt * (size * 0.7);
+        } else if (t < 0.75) {
+          let nt = (t - 0.5) / 0.25;
+          px = size * 0.75 - nt * (size * 1.35);
+          py = -size * 1.5 - Math.sin(nt * Math.PI) * (size * 0.45);
+        } else {
+          let nt = (t - 0.75) / 0.25;
+          px = -size * 0.6 + nt * (size * 0.85);
+          py = -size * 1.5 + Math.sin(nt * Math.PI * 0.8) * (size * 0.35);
+        }
+        tailPoints.push({ x: px, y: py });
+      }
+
+      // Draw tail segments (glowing hollow rings)
+      tailPoints.forEach((p, idx) => {
+        let r = size * 0.13 * (1.0 - (idx / numSegments) * 0.35);
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = '#00f3ff';
+        
+        ctx.strokeStyle = '#00f3ff';
+        ctx.lineWidth = 2.5;
+        ctx.fillStyle = 'rgba(0, 85, 255, 0.25)';
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.lineWidth = 1.0;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      });
+
+      // Draw Stinger
+      const tip = tailPoints[tailPoints.length - 1];
+      ctx.save();
+      ctx.translate(tip.x, tip.y);
+      ctx.rotate(-Math.PI * 0.25);
+      
+      ctx.fillStyle = '#00ffff';
+      ctx.shadowColor = '#00ffff';
+      ctx.shadowBlur = 20;
       ctx.beginPath();
-      ctx.moveTo(0, -size * 0.7);
-      ctx.lineTo(size * 0.7, 0);
-      ctx.lineTo(0, size * 0.8);
-      ctx.lineTo(-size * 0.7, 0);
+      ctx.moveTo(0, -10);
+      ctx.lineTo(6, 4);
+      ctx.quadraticCurveTo(0, 10, -6, 4);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.strokeStyle = 'rgba(0, 243, 255, 0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 14, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
+      // 4. Scorpio Zodiac Sign ♏ inside the tail loop
+      ctx.save();
+      ctx.strokeStyle = '#00ffff';
+      ctx.shadowColor = '#00ffff';
+      ctx.shadowBlur = 15;
+      ctx.lineWidth = 3.5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      
+      const cx = 0;
+      const cy = -size * 1.65;
+      const sw = size * 0.16;
+      const sh = size * 0.35;
+      
+      ctx.beginPath();
+      // Stem 1
+      ctx.moveTo(cx - sw, cy - sh * 0.45);
+      ctx.lineTo(cx - sw, cy + sh * 0.45);
+      
+      // Arch 1 & Stem 2
+      ctx.moveTo(cx - sw, cy - sh * 0.2);
+      ctx.quadraticCurveTo(cx - sw * 0.5, cy - sh * 0.55, cx, cy - sh * 0.45);
+      ctx.lineTo(cx, cy + sh * 0.45);
+      
+      // Arch 2 & Stem 3 (with arrow tail)
+      ctx.moveTo(cx, cy - sh * 0.2);
+      ctx.quadraticCurveTo(cx + sw * 0.5, cy - sh * 0.55, cx + sw, cy - sh * 0.45);
+      ctx.lineTo(cx + sw, cy + sh * 0.2);
+      // Arrow tail curve
+      ctx.quadraticCurveTo(cx + sw, cy + sh * 0.5, cx + sw * 1.6, cy + sh * 0.5);
+      ctx.quadraticCurveTo(cx + sw * 2.2, cy + sh * 0.5, cx + sw * 2.4, cy + sh * 0.15);
+      ctx.stroke();
+      
+      // Arrow Head
+      ctx.beginPath();
+      ctx.moveTo(cx + sw * 2.1, cy + sh * 0.25);
+      ctx.lineTo(cx + sw * 2.4, cy + sh * 0.15);
+      ctx.lineTo(cx + sw * 2.5, cy + sh * 0.4);
+      ctx.stroke();
+      ctx.restore();
+
+      // 5. Body Segment Plates
+      ctx.save();
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = '#00f3ff';
+      ctx.strokeStyle = '#00f3ff';
+      ctx.lineWidth = 2.5;
+      
+      for (let i = 0; i < 7; i++) {
+        let segW = size * (0.8 - Math.abs(i - 3) * 0.12);
+        let segH = size * 0.2;
+        let segY = -size * 0.5 + i * (size * 0.18);
+        
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(0, 85, 255, 0.25)' : 'rgba(0, 243, 255, 0.12)';
+        ctx.beginPath();
+        ctx.moveTo(-segW, segY);
+        ctx.quadraticCurveTo(0, segY + segH * 0.5, segW, segY);
+        ctx.quadraticCurveTo(segW * 1.1, segY + segH, segW, segY + segH);
+        ctx.quadraticCurveTo(0, segY + segH + segH * 0.5, -segW, segY + segH);
+        ctx.quadraticCurveTo(-segW * 1.1, segY + segH, -segW, segY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // 6. Claws (Left and Right, facing forward/bottom)
+      ctx.save();
+      ctx.strokeStyle = '#00f3ff';
+      ctx.shadowColor = '#00f3ff';
+      ctx.shadowBlur = 12;
+      ctx.lineWidth = 3;
+      
+      legSides.forEach(side => {
+        let armBaseX = side * size * 0.3;
+        let armBaseY = size * 0.4;
+        
+        let elbowX = side * size * 1.25;
+        let elbowY = size * 0.65;
+        let wristX = side * size * 0.9;
+        let wristY = size * 1.15;
+        
+        ctx.fillStyle = 'rgba(0, 85, 255, 0.18)';
+        ctx.beginPath();
+        ctx.moveTo(armBaseX, armBaseY);
+        ctx.quadraticCurveTo(elbowX, elbowY, wristX, wristY);
+        ctx.stroke();
+        
+        // Wrist joint
+        ctx.fillStyle = '#00ffff';
+        ctx.beginPath();
+        ctx.arc(wristX, wristY, 4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Outer claw finger
+        ctx.beginPath();
+        ctx.moveTo(wristX, wristY);
+        let outTipX = wristX - side * size * 0.2;
+        let outTipY = wristY + size * 0.45;
+        ctx.quadraticCurveTo(wristX - side * size * 0.35, wristY + size * 0.25, outTipX, outTipY);
+        ctx.quadraticCurveTo(wristX - side * size * 0.15, wristY + size * 0.35, wristX, wristY);
+        ctx.stroke();
+        ctx.fill();
+        
+        // Inner claw finger
+        ctx.beginPath();
+        ctx.moveTo(wristX, wristY);
+        let inTipX = wristX + side * size * 0.05;
+        let inTipY = wristY + size * 0.35;
+        ctx.quadraticCurveTo(wristX - side * size * 0.05, wristY + size * 0.25, inTipX, inTipY);
+        ctx.quadraticCurveTo(wristX + side * size * 0.08, wristY + size * 0.2, wristX, wristY);
+        ctx.stroke();
+        ctx.fill();
+      });
+      ctx.restore();
+
+      // 7. Glowing Eyes & Mandibles
+      ctx.save();
+      ctx.translate(0, size * 0.4);
+      
+      // Head base
+      ctx.fillStyle = 'rgba(0, 85, 255, 0.35)';
+      ctx.strokeStyle = '#00f3ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.3, 0);
+      ctx.lineTo(size * 0.3, 0);
+      ctx.lineTo(size * 0.15, size * 0.25);
+      ctx.lineTo(-size * 0.15, size * 0.25);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
-
-      // Body ribbed plates (horizontal lines)
-      ctx.strokeStyle = 'rgba(57, 255, 20, 0.6)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(-size * 0.4, -size * 0.2);
-      ctx.lineTo(size * 0.4, -size * 0.2);
-      ctx.moveTo(-size * 0.5, 0);
-      ctx.lineTo(size * 0.5, 0);
-      ctx.moveTo(-size * 0.4, size * 0.2);
-      ctx.lineTo(size * 0.4, size * 0.2);
-      ctx.stroke();
-
-      // 2. Claws
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = '#39ff14';
-      ctx.fillStyle = 'rgba(57, 255, 20, 0.25)';
-
-      // Left Claw Arm & Pincer
-      ctx.beginPath();
-      ctx.moveTo(-size * 0.5, -size * 0.2);
-      ctx.quadraticCurveTo(-size * 1.3, -size * 0.6, -size * 1.1, -size * 1.0); // arm
-      ctx.stroke();
       
-      // Left Pincer hook
-      ctx.beginPath();
-      ctx.arc(-size * 1.1, -size * 1.0, size * 0.35, Math.PI * 0.5, Math.PI * 1.6);
-      ctx.stroke();
-
-      // Right Claw Arm & Pincer
-      ctx.beginPath();
-      ctx.moveTo(size * 0.5, -size * 0.2);
-      ctx.quadraticCurveTo(size * 1.3, -size * 0.6, size * 1.1, -size * 1.0); // arm
-      ctx.stroke();
-      
-      // Right Pincer hook
-      ctx.beginPath();
-      ctx.arc(size * 1.1, -size * 1.0, size * 0.35, -Math.PI * 0.6, Math.PI * 0.5);
-      ctx.stroke();
-
-      // 3. Articulated Tail
-      ctx.strokeStyle = '#ffd700';
-      ctx.shadowColor = '#ffd700';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(0, size * 0.5);
-      // Curve tail up and over the boss head
-      ctx.quadraticCurveTo(size * 1.2, size * 1.2, size * 1.1, 0);
-      ctx.quadraticCurveTo(size * 0.9, -size * 1.1, 0, -size * 1.3);
-      ctx.stroke();
-
-      // Draw joint segments along the tail
-      ctx.fillStyle = '#ffd700';
-      const tailJoints = [
-        { x: size * 0.45, y: size * 0.8 },
-        { x: size * 0.95, y: size * 0.65 },
-        { x: size * 1.1, y: size * 0.35 },
-        { x: size * 1.05, y: size * 0.05 },
-        { x: size * 0.85, y: -size * 0.35 },
-        { x: size * 0.55, y: -size * 0.75 },
-        { x: size * 0.25, y: -size * 1.05 }
-      ];
-      tailJoints.forEach(j => {
-        ctx.beginPath();
-        ctx.arc(j.x, j.y, 4, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      // 4. Stinger at the end of the tail
-      ctx.fillStyle = '#ff3300';
-      ctx.shadowColor = '#ff3300';
-      ctx.shadowBlur = 15;
-      ctx.beginPath();
-      ctx.arc(0, -size * 1.3, 8, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Outer stinger ring
-      ctx.strokeStyle = '#ff3300';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(0, -size * 1.3, 13, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // 5. Glowing Central Eye/Core
-      ctx.fillStyle = '#ffffff';
-      ctx.shadowColor = '#39ff14';
+      // Eyes
+      ctx.fillStyle = '#00ffff';
+      ctx.shadowColor = '#00ffff';
       ctx.shadowBlur = 10;
       ctx.beginPath();
-      ctx.arc(0, -size * 0.4, size * 0.2, 0, Math.PI * 2);
+      ctx.moveTo(-size * 0.15, size * 0.05);
+      ctx.lineTo(-size * 0.05, size * 0.12);
+      ctx.lineTo(-size * 0.18, size * 0.15);
+      ctx.closePath();
       ctx.fill();
+      
+      ctx.beginPath();
+      ctx.moveTo(size * 0.15, size * 0.05);
+      ctx.lineTo(size * 0.05, size * 0.12);
+      ctx.lineTo(size * 0.18, size * 0.15);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Mandibles
+      ctx.strokeStyle = '#00ffff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.05, size * 0.22);
+      ctx.quadraticCurveTo(-size * 0.08, size * 0.32, -size * 0.02, size * 0.35);
+      ctx.moveTo(size * 0.05, size * 0.22);
+      ctx.quadraticCurveTo(size * 0.08, size * 0.32, size * 0.02, size * 0.35);
+      ctx.stroke();
+      
+      ctx.restore();
 
       ctx.restore();
     }
@@ -2064,13 +2331,17 @@
           this.shootTimer = 0;
           this.missileTimer = 0;       // Boss 2 homing missile timer
           this.scoreValue = type === 'BOSS1' ? 500 : (type === 'BOSS2' ? 1000 : 2500);
-          this.color = type === 'BOSS1' ? '#ff003c' : (type === 'BOSS2' ? '#ff00ff' : '#39ff14');
+          this.color = type === 'BOSS1' ? '#ff003c' : (type === 'BOSS2' ? '#ff00ff' : '#00ffff');
           this.direction = 1;         // Boss 2 sweep direction
           this.minionWaveCount = 0;   // Boss 2 and 3 minion wave count
           this.minionTimer = 0;       // Boss 2 and 3 minion spawn frequency timer
           this.burstSequence = 6;     // Boss 1 burst sequence index (starts finished)
           this.burstTimer = 0;        // Boss 1 burst interval timer
           this.clawShootTimer = 0;    // Boss 3 claw firing timer
+          if (type === 'BOSS3') {
+            this.forcefieldActive = false;
+            this.forcefieldTimer = 0;
+          }
         } else {
           this.width = 34;
           this.height = 34;
@@ -2191,6 +2462,26 @@
             this.x += (player.x - this.x) * 1.5 * dt;
           }
 
+          // Forcefield logic (7s off, 5s on)
+          if (this.forcefieldActive === undefined) {
+            this.forcefieldActive = false;
+            this.forcefieldTimer = 0;
+          }
+          this.forcefieldTimer += dt;
+          if (this.forcefieldActive) {
+            if (this.forcefieldTimer >= 5.0) {
+              this.forcefieldActive = false;
+              this.forcefieldTimer = 0;
+              audioEngine.playForcefieldOff();
+            }
+          } else {
+            if (this.forcefieldTimer >= 7.0) {
+              this.forcefieldActive = true;
+              this.forcefieldTimer = 0;
+              audioEngine.playForcefieldOn();
+            }
+          }
+
           // Firing large fireballs from the tail stinger (top/back of the scorpion)
           this.shootTimer += dt;
           if (this.shootTimer >= 3.0) {
@@ -2235,6 +2526,14 @@
       }
 
       takeDamage(amount) {
+        if (this.type === 'BOSS3' && this.forcefieldActive) {
+          // Block damage and generate neon blue/cyan deflect particles
+          for (let i = 0; i < 6; i++) {
+            particles.push(new Particle(this.x + (Math.random() - 0.5) * 60, this.y + (Math.random() - 0.5) * 60, '#00ffff'));
+          }
+          audioEngine.playShieldDeflect();
+          return false;
+        }
         this.hp -= amount;
         if (this.hp <= 0) {
           this.active = false;
@@ -2258,7 +2557,7 @@
         } else if (this.type === 'BOSS2') {
           drawBoss2(ctx, this.x, this.y, size, pulse);
         } else if (this.type === 'BOSS3') {
-          drawBoss3(ctx, this.x, this.y, size, pulse);
+          drawBoss3(ctx, this.x, this.y, size, pulse, this.forcefieldActive);
         }
 
         // Render health bar if damaged (and not a boss)
