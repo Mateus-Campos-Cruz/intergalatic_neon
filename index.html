@@ -192,69 +192,38 @@
 
     // --- PLAYER IDENTITY & LEADERBOARD ---
     let playerName = localStorage.getItem('ig_neon_playername') || '';
-    let playerIP = 'unknown';
     let leaderboard = [];
     let leaderboardLoaded = false;
     let leaderboardError = false;
     let scoreSaved = false;
 
+    // Stable per-device UID for deduplication (stored in localStorage)
+    const PLAYER_UID = (() => {
+      let uid = localStorage.getItem('ig_neon_uid');
+      if (!uid) { uid = Math.random().toString(36).substr(2, 10) + Date.now().toString(36); localStorage.setItem('ig_neon_uid', uid); }
+      return uid;
+    })();
+
     const JSONBIN_API_KEY = '$2a$10$N6l9Rvj6RAqZ8GFgi0okK.lhg2M/r1puSG4KleYm6rtaFyAQdesaq';
     const JSONBIN_BASE = 'https://api.jsonbin.io/v3';
-    let LEADERBOARD_BIN_ID = localStorage.getItem('ig_neon_bin_id') || null;
-
-    async function fetchPlayerIP() {
-      try {
-        const res = await fetch('https://api.ipify.org?format=json');
-        const data = await res.json();
-        playerIP = data.ip;
-      } catch (e) {
-        playerIP = 'local_' + (localStorage.getItem('ig_neon_uid') || (() => {
-          const uid = Math.random().toString(36).substr(2, 10);
-          localStorage.setItem('ig_neon_uid', uid);
-          return uid;
-        })());
-      }
-    }
-
-    async function initLeaderboardBin() {
-      if (LEADERBOARD_BIN_ID) return;
-      try {
-        const res = await fetch(`${JSONBIN_BASE}/b`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Access-Key': JSONBIN_API_KEY,
-            'X-Bin-Name': 'intergalactic_neon_ranking',
-            'X-Bin-Private': 'false'
-          },
-          body: JSON.stringify([])
-        });
-        const data = await res.json();
-        if (data.metadata && data.metadata.id) {
-          LEADERBOARD_BIN_ID = data.metadata.id;
-          localStorage.setItem('ig_neon_bin_id', LEADERBOARD_BIN_ID);
-        }
-      } catch (e) {
-        console.warn('Leaderboard bin creation failed:', e);
-      }
-    }
+    // Fixed shared bin — all players write to the same ranking
+    const LEADERBOARD_BIN_ID = '6a295ad8f5f4af5e29d7f64e';
 
     async function loadLeaderboard() {
       leaderboardLoaded = false;
       leaderboardError = false;
-      if (!LEADERBOARD_BIN_ID) {
-        leaderboard = [];
-        leaderboardLoaded = true;
-        return;
-      }
       try {
         const res = await fetch(`${JSONBIN_BASE}/b/${LEADERBOARD_BIN_ID}/latest`, {
           headers: { 'X-Access-Key': JSONBIN_API_KEY }
         });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        leaderboard = Array.isArray(data.record) ? data.record : [];
+        // Filter out seed/test entries and keep only real scores
+        leaderboard = (Array.isArray(data.record) ? data.record : [])
+          .filter(r => r.name !== 'TEST');
         leaderboardLoaded = true;
       } catch (e) {
+        console.warn('Leaderboard load failed:', e);
         leaderboard = [];
         leaderboardError = true;
         leaderboardLoaded = true;
@@ -262,24 +231,28 @@
     }
 
     async function saveScore(name, finalScore, wave) {
-      if (!LEADERBOARD_BIN_ID || scoreSaved) return;
+      if (scoreSaved) return;
       scoreSaved = true;
       try {
+        // 1. Read current records
         const res = await fetch(`${JSONBIN_BASE}/b/${LEADERBOARD_BIN_ID}/latest`, {
           headers: { 'X-Access-Key': JSONBIN_API_KEY }
         });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        let records = Array.isArray(data.record) ? data.record : [];
+        let records = (Array.isArray(data.record) ? data.record : [])
+          .filter(r => r.name !== 'TEST');
 
-        const existingIdx = records.findIndex(r => r.ip === playerIP);
         const newEntry = {
           name: (name || 'PILOTO').toUpperCase().substring(0, 12),
           score: finalScore,
           wave: wave,
-          ip: playerIP,
+          uid: PLAYER_UID,
           date: new Date().toLocaleDateString('pt-BR')
         };
 
+        // 2. Update if better score, else push new entry
+        const existingIdx = records.findIndex(r => r.uid === PLAYER_UID);
         if (existingIdx >= 0) {
           if (finalScore > records[existingIdx].score) {
             records[existingIdx] = newEntry;
@@ -291,7 +264,8 @@
         records.sort((a, b) => b.score - a.score);
         records = records.slice(0, 100);
 
-        await fetch(`${JSONBIN_BASE}/b/${LEADERBOARD_BIN_ID}`, {
+        // 3. Save back
+        const putRes = await fetch(`${JSONBIN_BASE}/b/${LEADERBOARD_BIN_ID}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -299,6 +273,7 @@
           },
           body: JSON.stringify(records)
         });
+        if (!putRes.ok) throw new Error(`PUT HTTP ${putRes.status}`);
 
         leaderboard = records;
       } catch (e) {
@@ -306,9 +281,8 @@
       }
     }
 
-    // Boot: fetch IP and init bin
-    fetchPlayerIP();
-    initLeaderboardBin();
+    // Boot: pre-load ranking on page open
+    loadLeaderboard();
 
     // --- PROCEDURAL AUDIO ENGINE ---
     class AudioEngine {
