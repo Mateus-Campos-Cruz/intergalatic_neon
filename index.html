@@ -2328,19 +2328,19 @@
 
         if (waveNum === 10) {
           this.enemiesTotal = 1;
-          this.spawnQueue.push({ type: 'BOSS1', hp: 375, x: V_WIDTH / 2, y: -60 });
+          this.spawnQueue.push({ type: 'BOSS1', hp: 200, x: V_WIDTH / 2, y: -60 });
           this.spawnInterval = 0.5;
           weaponKitsDropped = 0; // Reset for next bracket (phases 11-19)
           return;
         } else if (waveNum === 20) {
           this.enemiesTotal = 1;
-          this.spawnQueue.push({ type: 'BOSS2', hp: 375, x: V_WIDTH / 2, y: -60 });
+          this.spawnQueue.push({ type: 'BOSS2', hp: 200, x: V_WIDTH / 2, y: -60 });
           this.spawnInterval = 0.5;
           weaponKitsDropped = 0; // Reset for next bracket (phases 21-29)
           return;
         } else if (waveNum === 30) {
           this.enemiesTotal = 1;
-          this.spawnQueue.push({ type: 'BOSS3', hp: 3000, x: V_WIDTH / 2, y: -60 });
+          this.spawnQueue.push({ type: 'BOSS3', hp: 200, x: V_WIDTH / 2, y: -60 });
           this.spawnInterval = 0.5;
           return;
         }
