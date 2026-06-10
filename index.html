@@ -921,10 +921,10 @@
       constructor(x, y, type = 'WEAPON') {
         this.x = x;
         this.y = y;
-        this.type = type; // 'WEAPON' or 'SHIELD'
-        this.width = 20;
-        this.height = 20;
-        this.speed = 95;
+        this.type = type; // 'WEAPON', 'SHIELD', or 'MEDKIT'
+        this.width = type === 'MEDKIT' ? 28 : 20;
+        this.height = type === 'MEDKIT' ? 28 : 20;
+        this.speed = type === 'MEDKIT' ? 70 : 95; // MEDKIT falls slower so player can catch it
         this.active = true;
         this.pulseTime = Math.random() * 100;
       }
@@ -945,7 +945,7 @@
         ctx.scale(pulse, pulse);
 
         if (this.type === 'WEAPON') {
-          // Yellow powerup diamond with rotating outer borders
+          // Yellow powerup diamond
           ctx.shadowBlur = 15;
           ctx.shadowColor = '#ffd700';
           ctx.strokeStyle = '#ffd700';
@@ -967,7 +967,7 @@
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText('W', 0, 0);
-        } else {
+        } else if (this.type === 'SHIELD') {
           // Blue-cyan hexagon for Shield powerup
           ctx.shadowBlur = 15;
           ctx.shadowColor = '#00ffff';
@@ -990,6 +990,33 @@
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText('S', 0, 0);
+        } else if (this.type === 'MEDKIT') {
+          // Red glowing cross — emergency life restore
+          ctx.shadowBlur = 22;
+          ctx.shadowColor = '#ff0055';
+          ctx.strokeStyle = '#ff0055';
+          ctx.lineWidth = 2;
+          ctx.fillStyle = 'rgba(255, 0, 85, 0.18)';
+
+          // Outer circle background
+          ctx.beginPath();
+          ctx.arc(0, 0, size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          // Cross arms
+          const arm = size * 0.55;
+          const thick = size * 0.28;
+          ctx.fillStyle = '#ff0055';
+          ctx.shadowBlur = 18;
+          ctx.fillRect(-thick, -arm, thick * 2, arm * 2); // vertical
+          ctx.fillRect(-arm, -thick, arm * 2, thick * 2); // horizontal
+
+          // White inner shine
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+          ctx.shadowBlur = 0;
+          ctx.fillRect(-thick * 0.5, -arm * 0.7, thick, arm * 1.4);
+          ctx.fillRect(-arm * 0.7, -thick * 0.5, arm * 1.4, thick);
         }
 
         ctx.restore();
@@ -2129,6 +2156,7 @@
     let waveTime = 0;
     let pointsTimer = 0;
     let weaponKitsDropped = 0; // Tracks weapon kit drops per phase bracket
+    let shieldDroppedThisWave = false; // Caps shield drops to 1 per wave
 
     // --- INTERACTIVE UI BUTTONS ---
     const buttons = {
@@ -2153,7 +2181,8 @@
       powerups = [];
       waveTime = 0;
       pointsTimer = 0;
-      weaponKitsDropped = 0; // Reset kit counter on new game
+      weaponKitsDropped = 0;     // Reset kit counter on new game
+      shieldDroppedThisWave = false;
       player.reset();
       waveManager.startWave(1);
       gameState = 'PLAYING';
@@ -2486,6 +2515,7 @@
 
     // --- GAME ENGINE PROCESSORS ---
     function triggerWaveClear() {
+      shieldDroppedThisWave = false; // Reset shield cap for next wave
       // Perfect Wave Bonus Check
       if (!waveManager.waveDamageTaken) {
         score += 100;
@@ -2553,15 +2583,27 @@
 
                 if (enemy.guaranteedDrop) {
                   powerups.push(new PowerUp(enemy.x, enemy.y, enemy.guaranteedDrop));
+                } else if (isBossWave && enemy.type.startsWith('BOSS')) {
+                  // Boss defeated → drop emergency MEDKIT (restores all lives)
+                  powerups.push(new PowerUp(enemy.x, enemy.y + 30, 'MEDKIT'));
                 } else if (!isBossWave) {
                   // Collectible items spawned on even waves (only if not boss wave)
                   const isEvenWave = (waveManager.currentWave % 2 === 0);
                   if (isEvenWave && Math.random() < 0.22) { // 22% chance of drop
-                    // Cap weapon kits at 2 per bracket (phases 1-9 and 11-19)
+                    // Cap weapon kits at 2 per bracket; shield capped at 1 per wave
                     const canDropWeapon = weaponKitsDropped < 2;
-                    const type = (Math.random() < 0.5 && canDropWeapon) ? 'WEAPON' : 'SHIELD';
+                    const canDropShield = !shieldDroppedThisWave;
+                    let type = null;
+                    if (canDropWeapon && canDropShield) {
+                      type = Math.random() < 0.5 ? 'WEAPON' : 'SHIELD';
+                    } else if (canDropWeapon) {
+                      type = 'WEAPON';
+                    } else if (canDropShield) {
+                      type = 'SHIELD';
+                    }
                     if (type === 'WEAPON') weaponKitsDropped++;
-                    powerups.push(new PowerUp(enemy.x, enemy.y, type));
+                    if (type === 'SHIELD') shieldDroppedThisWave = true;
+                    if (type) powerups.push(new PowerUp(enemy.x, enemy.y, type));
                   }
                 }
 
@@ -2627,11 +2669,20 @@
               // Collectible items spawned on even waves (onda sim, onda não)
               const isEvenWave = (waveManager.currentWave % 2 === 0);
               if (isEvenWave && Math.random() < 0.22) {
-                // Cap weapon kits at 2 per bracket (phases 1-9 and 11-19)
+                // Cap weapon kits at 2 per bracket; shield capped at 1 per wave
                 const canDropWeapon = weaponKitsDropped < 2;
-                const type = (Math.random() < 0.5 && canDropWeapon) ? 'WEAPON' : 'SHIELD';
+                const canDropShield = !shieldDroppedThisWave;
+                let type = null;
+                if (canDropWeapon && canDropShield) {
+                  type = Math.random() < 0.5 ? 'WEAPON' : 'SHIELD';
+                } else if (canDropWeapon) {
+                  type = 'WEAPON';
+                } else if (canDropShield) {
+                  type = 'SHIELD';
+                }
                 if (type === 'WEAPON') weaponKitsDropped++;
-                powerups.push(new PowerUp(enemy.x, enemy.y, type));
+                if (type === 'SHIELD') shieldDroppedThisWave = true;
+                if (type) powerups.push(new PowerUp(enemy.x, enemy.y, type));
               }
             }
 
@@ -2680,6 +2731,16 @@
             } else if (pu.type === 'SHIELD') {
               player.activateShield(30);
               audioEngine.playPowerUp();
+            } else if (pu.type === 'MEDKIT') {
+              // Full life restore
+              player.lives = 3;
+              player.invulnerable = false;
+              player.invulnerableTimer = 0;
+              audioEngine.playPowerUp();
+              // Celebration particles
+              for (let p = 0; p < 20; p++) {
+                particles.push(new Particle(player.x, player.y, '#ff0055'));
+              }
             }
             score += 15;
           }
