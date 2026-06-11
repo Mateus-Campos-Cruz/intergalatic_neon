@@ -236,6 +236,19 @@
     // Fixed shared bin — all players write to the same ranking
     const LEADERBOARD_BIN_ID = '6a295ad8f5f4af5e29d7f64e';
 
+    let clientIP = '';
+    async function fetchClientIP() {
+      try {
+        const res = await fetch('https://api.ipify.org?format=json');
+        if (res.ok) {
+          const data = await res.json();
+          clientIP = data.ip || '';
+        }
+      } catch (e) {
+        console.warn("IP fetch failed:", e);
+      }
+    }
+
     async function loadLeaderboard() {
       leaderboardLoaded = false;
       leaderboardError = false;
@@ -249,6 +262,26 @@
         leaderboard = (Array.isArray(data.record) ? data.record : [])
           .filter(r => r.name !== 'TEST');
         leaderboardLoaded = true;
+
+        // Auto-identify player from leaderboard if not already in localStorage
+        if (!playerName || playerName.length === 0) {
+          let match = leaderboard.find(r => r.uid === PLAYER_UID);
+          if (!match && clientIP) {
+            match = leaderboard.find(r => r.ip === clientIP);
+          }
+          if (match && match.name) {
+            playerName = match.name;
+            try {
+              localStorage.setItem('ig_neon_playername', playerName);
+            } catch (e) {
+              console.warn("Storage write failed:", e);
+            }
+            const overlay = document.getElementById('nameInputOverlay');
+            if (overlay) {
+              overlay.style.display = 'none';
+            }
+          }
+        }
       } catch (e) {
         console.warn('Leaderboard load failed:', e);
         leaderboard = [];
@@ -275,14 +308,25 @@
           score: finalScore,
           wave: wave,
           uid: PLAYER_UID,
+          ip: clientIP || '',
           date: new Date().toLocaleDateString('pt-BR')
         };
 
         // 2. Update if better score, else push new entry
-        const existingIdx = records.findIndex(r => r.uid === PLAYER_UID);
+        let existingIdx = records.findIndex(r => r.uid === PLAYER_UID);
+        if (existingIdx === -1 && clientIP) {
+          existingIdx = records.findIndex(r => r.ip === clientIP);
+        }
+
         if (existingIdx >= 0) {
+          if (records[existingIdx].uid !== PLAYER_UID) {
+            newEntry.uid = PLAYER_UID;
+          }
           if (finalScore > records[existingIdx].score) {
             records[existingIdx] = newEntry;
+          } else {
+            records[existingIdx].uid = PLAYER_UID;
+            if (clientIP) records[existingIdx].ip = clientIP;
           }
         } else {
           records.push(newEntry);
@@ -308,8 +352,11 @@
       }
     }
 
-    // Boot: pre-load ranking on page open
-    loadLeaderboard();
+    // Boot: pre-load ranking and client IP on page open
+    (async () => {
+      await fetchClientIP();
+      await loadLeaderboard();
+    })();
 
     // --- PROCEDURAL AUDIO ENGINE ---
     class AudioEngine {
@@ -4217,26 +4264,35 @@
       }
 
       function confirmName() {
-        const name = input.value.trim().toUpperCase();
-        if (name.length === 0) {
-          errorEl.textContent = 'NOME OBRIGATORIO!';
-          input.style.borderColor = '#ff0055';
-          input.style.boxShadow = '0 0 25px rgba(255,0,85,0.4)';
-          setTimeout(() => input.focus(), 100);
-          return;
-        }
-        playerName = name;
         try {
-          localStorage.setItem('ig_neon_playername', playerName);
-        } catch (e) {
-          console.warn("Storage write failed:", e);
+          const name = input.value.trim().toUpperCase();
+          if (name.length === 0) {
+            errorEl.textContent = 'NOME OBRIGATORIO!';
+            input.style.borderColor = '#ff0055';
+            input.style.boxShadow = '0 0 25px rgba(255,0,85,0.4)';
+            setTimeout(() => input.focus(), 100);
+            return;
+          }
+          playerName = name;
+          try {
+            localStorage.setItem('ig_neon_playername', playerName);
+          } catch (e) {
+            console.warn("Storage write failed:", e);
+          }
+          overlay.style.display = 'none';
+          audioEngine.init();
+          audioEngine.resume();
+        } catch (err) {
+          errorEl.textContent = 'ERRO: ' + err.message;
+          console.error(err);
         }
-        overlay.style.display = 'none';
-        audioEngine.init();
-        audioEngine.resume();
       }
 
       confirmBtn.addEventListener('click', confirmName);
+      confirmBtn.addEventListener('touchstart', e => {
+        confirmName();
+        e.preventDefault();
+      });
       input.addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); confirmName(); }
         errorEl.textContent = '';
