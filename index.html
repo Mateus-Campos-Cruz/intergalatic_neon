@@ -804,6 +804,8 @@
 
     class Nebula {
       constructor() {
+        this.offscreenCanvas = document.createElement('canvas');
+        this.offscreenCtx = this.offscreenCanvas.getContext('2d');
         this.reset(true);
       }
 
@@ -818,6 +820,24 @@
           { r: 10, g: 0, b: 32, a: 0.18 }
         ];
         this.color = colors[Math.floor(Math.random() * colors.length)];
+        this.prerender();
+      }
+
+      prerender() {
+        const d = Math.ceil(this.radius * 2);
+        this.offscreenCanvas.width = d;
+        this.offscreenCanvas.height = d;
+        
+        this.offscreenCtx.clearRect(0, 0, d, d);
+        let grad = this.offscreenCtx.createRadialGradient(this.radius, this.radius, 0, this.radius, this.radius, this.radius);
+        grad.addColorStop(0, `rgba(${this.color.r}, ${this.color.g}, ${this.color.b}, ${this.color.a})`);
+        grad.addColorStop(0.5, `rgba(${this.color.r}, ${this.color.g}, ${this.color.b}, ${this.color.a * 0.4})`);
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        
+        this.offscreenCtx.fillStyle = grad;
+        this.offscreenCtx.beginPath();
+        this.offscreenCtx.arc(this.radius, this.radius, this.radius, 0, Math.PI * 2);
+        this.offscreenCtx.fill();
       }
 
       update(dt) {
@@ -828,16 +848,7 @@
       }
 
       draw(ctx) {
-        ctx.save();
-        let grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius);
-        grad.addColorStop(0, `rgba(${this.color.r}, ${this.color.g}, ${this.color.b}, ${this.color.a})`);
-        grad.addColorStop(0.5, `rgba(${this.color.r}, ${this.color.g}, ${this.color.b}, ${this.color.a * 0.4})`);
-        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        ctx.drawImage(this.offscreenCanvas, this.x - this.radius, this.y - this.radius);
       }
     }
 
@@ -1048,15 +1059,10 @@
 
       draw(ctx) {
         if (this.life <= 0) return;
-        ctx.save();
         ctx.globalAlpha = this.life;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = this.color;
         ctx.fillStyle = this.color;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        ctx.fillRect(this.x - this.size, this.y - this.size, this.size * 2, this.size * 2);
+        ctx.globalAlpha = 1.0;
       }
     }
     class Shockwave {
