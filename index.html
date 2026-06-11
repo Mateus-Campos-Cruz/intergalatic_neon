@@ -19,9 +19,6 @@
       overflow: hidden;
       background-color: #050010;
       font-family: 'Orbitron', monospace;
-      user-select: none;
-      -webkit-user-select: none;
-      touch-action: none;
     }
     
     #gameCanvas {
@@ -32,6 +29,9 @@
       width: 100%;
       height: 100%;
       z-index: 1;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
     }
 
     #audioNotice {
@@ -74,6 +74,9 @@
       justify-content: center;
       z-index: 100;
       font-family: 'Orbitron', monospace;
+      user-select: text !important;
+      -webkit-user-select: text !important;
+      touch-action: auto !important;
     }
     #nameInputOverlay .overlay-title {
       color: #00ffff;
@@ -185,13 +188,28 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
+    const isOverlayActive = () => {
+      const overlay = document.getElementById('nameInputOverlay');
+      return overlay && overlay.style.display !== 'none';
+    };
+    
     let gameState = 'MENU'; // MENU, PLAYING, GAME_OVER, VICTORY, LEADERBOARD
     let score = 0;
-    let highscore = parseInt(localStorage.getItem('intergalactic_neon_highscore') || '0', 10);
+    let highscore = 0;
+    try {
+      highscore = parseInt(localStorage.getItem('intergalactic_neon_highscore') || '0', 10);
+    } catch (e) {
+      console.warn("Storage read failed:", e);
+    }
     let tick = 0;
 
     // --- PLAYER IDENTITY & LEADERBOARD ---
-    let playerName = localStorage.getItem('ig_neon_playername') || '';
+    let playerName = '';
+    try {
+      playerName = localStorage.getItem('ig_neon_playername') || '';
+    } catch (e) {
+      console.warn("Storage read failed:", e);
+    }
     let leaderboard = [];
     let leaderboardLoaded = false;
     let leaderboardError = false;
@@ -199,8 +217,17 @@
 
     // Stable per-device UID for deduplication (stored in localStorage)
     const PLAYER_UID = (() => {
-      let uid = localStorage.getItem('ig_neon_uid');
-      if (!uid) { uid = Math.random().toString(36).substr(2, 10) + Date.now().toString(36); localStorage.setItem('ig_neon_uid', uid); }
+      let uid = null;
+      try {
+        uid = localStorage.getItem('ig_neon_uid');
+        if (!uid) {
+          uid = Math.random().toString(36).substr(2, 10) + Date.now().toString(36);
+          localStorage.setItem('ig_neon_uid', uid);
+        }
+      } catch (e) {
+        console.warn("Storage failed:", e);
+        uid = Math.random().toString(36).substr(2, 10) + Date.now().toString(36);
+      }
       return uid;
     })();
 
@@ -653,6 +680,38 @@
         osc.start(now);
         osc.stop(now + 0.25);
       }
+
+      playSuperpower() {
+        if (!this.initialized) return;
+        this.resume();
+        const now = this.ctx.currentTime;
+        const duration = 1.2;
+
+        const osc1 = this.ctx.createOscillator();
+        const gain1 = this.ctx.createGain();
+        osc1.type = 'sawtooth';
+        osc1.frequency.setValueAtTime(120, now);
+        osc1.frequency.linearRampToValueAtTime(30, now + duration);
+        gain1.gain.setValueAtTime(0.3, now);
+        gain1.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        osc1.connect(gain1);
+        gain1.connect(this.masterGain);
+
+        const osc2 = this.ctx.createOscillator();
+        const gain2 = this.ctx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(250, now);
+        osc2.frequency.exponentialRampToValueAtTime(950, now + duration * 0.8);
+        gain2.gain.setValueAtTime(0.2, now);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        osc2.connect(gain2);
+        gain2.connect(this.masterGain);
+
+        osc1.start(now);
+        osc1.stop(now + duration);
+        osc2.start(now);
+        osc2.stop(now + duration);
+      }
     }
 
     const audioEngine = new AudioEngine();
@@ -953,6 +1012,36 @@
         ctx.restore();
       }
     }
+    class Shockwave {
+      constructor(x, y, maxRadius, color) {
+        this.x = x;
+        this.y = y;
+        this.maxRadius = maxRadius;
+        this.color = color || '#bd00ff';
+        this.life = 1.0;
+        this.decay = 2.0; // fades out in 0.5s
+        this.radius = 0;
+      }
+
+      update(dt) {
+        this.life -= this.decay * dt;
+        this.radius = (1.0 - Math.max(0, this.life)) * this.maxRadius;
+      }
+
+      draw(ctx) {
+        if (this.life <= 0) return;
+        ctx.save();
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = this.color;
+        ctx.strokeStyle = this.color;
+        ctx.globalAlpha = this.life;
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
 
     // --- HOMING MISSILE ---
     class Missile {
@@ -1224,6 +1313,30 @@
           ctx.lineTo(size * 0.12, size * 0.22);
           ctx.closePath();
           ctx.fill();
+        } else if (this.type === 'SUPERPOWER') {
+          // Golden star-shaped superpower kit
+          ctx.shadowBlur = 25;
+          ctx.shadowColor = '#ffd700';
+          ctx.strokeStyle = '#ffd700';
+          ctx.lineWidth = 2.5;
+          ctx.fillStyle = 'rgba(255, 215, 0, 0.25)';
+
+          ctx.beginPath();
+          for (let i = 0; i < 16; i++) {
+            const angle = i * Math.PI / 8 - Math.PI / 2;
+            const r = (i % 2 === 0) ? size * 1.15 : size * 0.55;
+            ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.font = 'bold 9px "Orbitron", monospace';
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowBlur = 0;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('SP', 0, 0);
         }
 
         ctx.restore();
@@ -1238,9 +1351,9 @@
         this.vx = 0;
         this.vy = -120; // initial upward nudge toward enemies
         this.speed = 300;
-        this.damage = 2.0;   // 2x a normal bullet at level 1
-        this.blastRadius = 50;
-        this.life = 4.0;
+        this.damage = 4.0;   // 4x a normal bullet (improved!)
+        this.blastRadius = 120; // improved blast radius (from 50 to 120)
+        this.life = 2.0; // explodes after 2 seconds if no target hit
         this.active = true;
         this.trail = [];
         this.width = 12;
@@ -1307,6 +1420,8 @@
         for (let i = 0; i < 30; i++) {
           particles.push(new Particle(this.x, this.y, i % 3 === 0 ? '#ffffff' : (i % 3 === 1 ? '#bd00ff' : '#ff00ff')));
         }
+        // Spawn a glowing expanding purple shockwave ring
+        particles.push(new Shockwave(this.x, this.y, this.blastRadius, '#bd00ff'));
         audioEngine.playEnemyExplosion();
 
         // Area damage — hits all enemies within blastRadius
@@ -2353,6 +2468,7 @@
         this.pulseTime = Math.random() * 100;
         this.baseX = x;
         this.sineOffset = Math.random() * Math.PI * 2;
+        this.superpowerHit = false;
       }
 
       update(dt, waveTime, speedMultiplier) {
@@ -2525,8 +2641,8 @@
         }
       }
 
-      takeDamage(amount) {
-        if (this.type === 'BOSS3' && this.forcefieldActive) {
+      takeDamage(amount, pierceForcefield = false) {
+        if (this.type === 'BOSS3' && this.forcefieldActive && !pierceForcefield) {
           // Block damage and generate neon blue/cyan deflect particles
           for (let i = 0; i < 6; i++) {
             particles.push(new Particle(this.x + (Math.random() - 0.5) * 60, this.y + (Math.random() - 0.5) * 60, '#00ffff'));
@@ -2749,6 +2865,9 @@
           this.transitionTimer -= dt;
           if (this.transitionTimer <= 0) {
             this.state = 'PLAYING';
+            if (this.currentWave === 4 || this.currentWave === 12 || this.currentWave === 18) {
+              spawnSuperpowerKit();
+            }
           }
           return;
         }
@@ -2781,6 +2900,10 @@
     let pointsTimer = 0;
     let weaponKitsDropped = 0; // Tracks weapon kit drops per phase bracket
     let shieldDroppedThisWave = false; // Caps shield drops to 1 per wave
+    let superpowerAvailable = false;
+    let superpowerActive = false;
+    let superpowerRadius = 0;
+    let superpowerCenter = { x: 0, y: 0 };
 
     // --- INTERACTIVE UI BUTTONS ---
     const buttons = {
@@ -2790,11 +2913,31 @@
       rankingButton: { text: "RANKING", x: 0, y: 0, w: 0, h: 0, hover: false },
       leaderboardButton: { text: "VER RANKING", x: 0, y: 0, w: 0, h: 0, hover: false },
       backButton: { text: "\u2190 MENU PRINCIPAL", x: 0, y: 0, w: 0, h: 0, hover: false },
-      muteButton: { x: V_WIDTH - 150, y: 13, w: 24, h: 24, hover: false }
+      muteButton: { x: V_WIDTH - 150, y: 13, w: 24, h: 24, hover: false },
+      superpowerButton: { text: "ATIVAR SUPERPODER", x: 0, y: 0, w: 0, h: 0, hover: false }
     };
 
     function isInside(px, py, btn) {
       return px >= btn.x && px <= btn.x + btn.w && py >= btn.y && py <= btn.y + btn.h;
+    }
+
+    function spawnSuperpowerKit() {
+      const x = 50 + Math.random() * (V_WIDTH - 100);
+      const y = -40; // coming from space
+      powerups.push(new PowerUp(x, y, 'SUPERPOWER'));
+    }
+
+    function activateSuperpower() {
+      if (!superpowerAvailable || superpowerActive) return;
+      superpowerAvailable = false;
+      superpowerActive = true;
+      superpowerRadius = 0;
+      superpowerCenter.x = player.x;
+      superpowerCenter.y = player.y;
+      audioEngine.playSuperpower();
+      for (let i = 0; i < 50; i++) {
+        particles.push(new Particle(player.x, player.y, i % 2 === 0 ? '#ffd700' : '#ff00ff'));
+      }
     }
 
     // --- SYSTEMS INITIALIZATION & LIFE CYCLES ---
@@ -2808,12 +2951,15 @@
       playerMissiles = [];
       playerMissileActive = false;
       playerMissileTimer = 0;
+      superpowerAvailable = false;
+      superpowerActive = false;
+      superpowerRadius = 0;
       waveTime = 0;
       pointsTimer = 0;
       weaponKitsDropped = 0;     // Reset kit counter on new game
       shieldDroppedThisWave = false;
       player.reset();
-      waveManager.startWave(1);
+      waveManager.startWave(4); // Start at Wave 4 for testing superpower spawn
       gameState = 'PLAYING';
     }
 
@@ -2984,6 +3130,41 @@
       ctx.shadowBlur = 15;
       ctx.fillText(text, x, y);
       
+    function drawSuperpowerButton(ctx, btn, x, y, radius) {
+      btn.x = x - radius;
+      btn.y = y - radius;
+      btn.w = radius * 2;
+      btn.h = radius * 2;
+
+      ctx.save();
+      ctx.translate(x, y);
+
+      let pulse = 0.5 + Math.sin(tick * 0.15) * 0.5;
+      
+      // Borda azul igual o escudo (cyan/blue neon)
+      ctx.shadowBlur = btn.hover ? 20 : 10 + pulse * 8;
+      ctx.shadowColor = '#00ffff';
+      ctx.strokeStyle = btn.hover ? '#39ff14' : '#00ffff';
+      ctx.lineWidth = btn.hover ? 3.5 : 2.5;
+
+      // Botão dourado (gold fill)
+      ctx.fillStyle = btn.hover ? 'rgba(218, 165, 32, 0.45)' : 'rgba(255, 215, 0, 0.25)';
+
+      // Draw circle
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // S azul no meio
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#0066ff';
+      ctx.fillStyle = '#00d8ff';
+      ctx.font = `bold ${Math.floor(radius * 1.0)}px 'Orbitron', monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('S', 0, 0);
+
       ctx.restore();
     }
 
@@ -3399,6 +3580,12 @@
               for (let p = 0; p < 25; p++) {
                 particles.push(new Particle(player.x, player.y, '#bd00ff'));
               }
+            } else if (pu.type === 'SUPERPOWER') {
+              superpowerAvailable = true;
+              audioEngine.playPowerUp();
+              for (let p = 0; p < 25; p++) {
+                particles.push(new Particle(player.x, player.y, '#ffd700'));
+              }
             }
             score += 15;
           }
@@ -3489,6 +3676,51 @@
         }
         playerMissiles.forEach(pm => pm.update(dt));
 
+        // Superpower active update
+        if (superpowerActive) {
+          superpowerRadius += 550 * dt;
+          if (superpowerRadius > Math.max(V_WIDTH, V_HEIGHT) * 1.25) {
+            superpowerActive = false;
+          }
+          for (let i = enemies.length - 1; i >= 0; i--) {
+            const e = enemies[i];
+            if (!e.active) continue;
+            if (e.superpowerHit) continue;
+            
+            const d = Math.hypot(e.x - superpowerCenter.x, e.y - superpowerCenter.y);
+            if (d <= superpowerRadius) {
+              e.superpowerHit = true;
+              const isBoss = e.type.startsWith('BOSS');
+              const dmg = isBoss ? 1.0 : 999;
+              const destroyed = e.takeDamage(dmg, true); // pierceForcefield = true
+              
+              if (destroyed) {
+                audioEngine.playEnemyExplosion();
+                score += e.scoreValue;
+                for (let p = 0; p < 20; p++) {
+                  particles.push(new Particle(e.x, e.y, e.color));
+                }
+                const isBossWave = (waveManager.currentWave === 8 || waveManager.currentWave === 16 || waveManager.currentWave === 24);
+                if (!e.isLeftover && !isBossWave) waveManager.enemiesDestroyed++;
+                if (e.guaranteedDrop) {
+                  powerups.push(new PowerUp(e.x, e.y, e.guaranteedDrop));
+                } else if (isBossWave && isBoss) {
+                  powerups.push(new PowerUp(e.x, e.y + 30, 'MEDKIT'));
+                  if (e.type === 'BOSS2') {
+                    powerups.push(new PowerUp(e.x - 40, e.y + 60, 'MISSILE_KIT'));
+                  }
+                  triggerWaveClear();
+                }
+              } else if (isBoss) {
+                // If it is a boss and survived, generate golden sparks at impact
+                for (let p = 0; p < 12; p++) {
+                  particles.push(new Particle(e.x, e.y, '#ffd700'));
+                }
+              }
+            }
+          }
+        }
+
         // 2. Resolve collisions
         checkCollisions();
 
@@ -3507,6 +3739,26 @@
         particles.forEach(p => p.draw(ctx));
         player.draw(ctx);
 
+        // Render superpower expanding shockwave ring
+        if (superpowerActive) {
+          ctx.save();
+          ctx.shadowBlur = 35;
+          ctx.shadowColor = '#ffd700';
+          const colorCycle = Math.floor(tick / 3) % 360;
+          ctx.strokeStyle = `hsla(${colorCycle}, 100%, 60%, ${0.9 * (1.0 - superpowerRadius / (Math.max(V_WIDTH, V_HEIGHT) * 1.25))})`;
+          ctx.lineWidth = 12;
+          ctx.beginPath();
+          ctx.arc(superpowerCenter.x, superpowerCenter.y, superpowerRadius, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(superpowerCenter.x, superpowerCenter.y, superpowerRadius - 6, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
         // Render Wave overlay if transitioning
         if (waveManager.state === 'TRANSITION') {
           drawWaveBanner(ctx, waveManager.currentWave, waveManager.transitionTimer, waveManager.transitionDuration);
@@ -3517,6 +3769,11 @@
 
         // HUD panel layer
         drawHUD(ctx);
+
+        // Draw superpower button if available
+        if (superpowerAvailable) {
+          drawSuperpowerButton(ctx, buttons.superpowerButton, V_WIDTH - 45, V_HEIGHT - 45, 22);
+        }
 
       } else if (gameState === 'MENU') {
         // Floating spaceship decoration
@@ -3786,6 +4043,9 @@
     function handleMove(clientX, clientY) {
       const { x, y } = convertCoords(clientX, clientY);
       if (gameState === 'PLAYING') {
+        if (superpowerAvailable && isInside(x, y, buttons.superpowerButton)) {
+          return;
+        }
         player.targetX = x;
         player.targetY = y;
       }
@@ -3824,6 +4084,7 @@
 
     // Mouse movement binding
     window.addEventListener('mousemove', e => {
+      if (isOverlayActive()) return;
       const { x, y } = convertCoords(e.clientX, e.clientY);
       
       buttons.muteButton.hover = isInside(x, y, buttons.muteButton);
@@ -3837,12 +4098,17 @@
         buttons.leaderboardButton.hover = isInside(x, y, buttons.leaderboardButton);
       } else if (gameState === 'LEADERBOARD') {
         buttons.backButton.hover = isInside(x, y, buttons.backButton);
+      } else if (gameState === 'PLAYING' && superpowerAvailable) {
+        buttons.superpowerButton.hover = isInside(x, y, buttons.superpowerButton);
+      } else {
+        buttons.superpowerButton.hover = false;
       }
       handleMove(e.clientX, e.clientY);
     });
 
     // Touch support bindings
     window.addEventListener('touchstart', e => {
+      if (isOverlayActive()) return;
       audioEngine.init();
       audioEngine.resume();
       if (e.touches.length > 0) {
@@ -3856,6 +4122,11 @@
         }
 
         if (gameState === 'PLAYING') {
+          if (superpowerAvailable && isInside(x, y, buttons.superpowerButton)) {
+            activateSuperpower();
+            e.preventDefault();
+            return;
+          }
           player.targetX = x;
           player.targetY = y;
         } else if (gameState === 'MENU') {
@@ -3876,14 +4147,20 @@
     }, { passive: false });
 
     window.addEventListener('touchmove', e => {
+      if (isOverlayActive()) return;
       if (e.touches.length > 0) {
         const touch = e.touches[0];
+        const { x, y } = convertCoords(touch.clientX, touch.clientY);
+        if (gameState === 'PLAYING' && superpowerAvailable && isInside(x, y, buttons.superpowerButton)) {
+          return;
+        }
         handleMove(touch.clientX, touch.clientY);
       }
     }, { passive: false });
 
     // Desktop Click trigger trigger
     window.addEventListener('click', e => {
+      if (isOverlayActive()) return;
       audioEngine.init();
       audioEngine.resume();
       const { x, y } = convertCoords(e.clientX, e.clientY);
@@ -3891,6 +4168,13 @@
       if (isInside(x, y, buttons.muteButton)) {
         audioEngine.toggleMute();
         return;
+      }
+
+      if (gameState === 'PLAYING' && superpowerAvailable) {
+        if (isInside(x, y, buttons.superpowerButton)) {
+          activateSuperpower();
+          return;
+        }
       }
 
       if (gameState === 'MENU') {
@@ -3920,6 +4204,9 @@
       const confirmBtn = document.getElementById('confirmNameBtn');
       const errorEl = document.getElementById('nameInputError');
 
+      // No stopPropagation to allow standard keyboard/focus browser behaviors.
+      // Game input events are ignored while overlay is active via isOverlayActive checks.
+
       // If player name already saved, skip overlay
       if (playerName && playerName.length > 0) {
         overlay.style.display = 'none';
@@ -3939,7 +4226,11 @@
           return;
         }
         playerName = name;
-        localStorage.setItem('ig_neon_playername', playerName);
+        try {
+          localStorage.setItem('ig_neon_playername', playerName);
+        } catch (e) {
+          console.warn("Storage write failed:", e);
+        }
         overlay.style.display = 'none';
         audioEngine.init();
         audioEngine.resume();
