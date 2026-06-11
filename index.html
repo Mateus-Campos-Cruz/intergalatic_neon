@@ -1479,6 +1479,7 @@
 
         // Area damage — hits all enemies within blastRadius
         let anyDestroyed = false;
+        let bossDestroyed = false;
         for (let i = enemies.length - 1; i >= 0; i--) {
           const e = enemies[i];
           if (!e.active) continue;
@@ -1492,13 +1493,24 @@
                 particles.push(new Particle(e.x, e.y, e.color));
               }
               const isBossWave = (waveManager.currentWave === 8 || waveManager.currentWave === 16 || waveManager.currentWave === 24);
-              if (!e.isLeftover && !isBossWave) waveManager.enemiesDestroyed++;
+              const isBoss = e.type.startsWith('BOSS');
+              if (isBossWave && isBoss) {
+                bossDestroyed = true;
+                powerups.push(new PowerUp(e.x, e.y + 30, 'MEDKIT'));
+                if (e.type === 'BOSS2') {
+                  powerups.push(new PowerUp(e.x - 40, e.y + 60, 'MISSILE_KIT'));
+                }
+              } else if (!e.isLeftover) {
+                waveManager.enemiesDestroyed++;
+              }
               anyDestroyed = true;
             }
           }
         }
 
-        if (anyDestroyed) {
+        if (bossDestroyed) {
+          triggerWaveClear();
+        } else if (anyDestroyed) {
           const isBossWave = (waveManager.currentWave === 8 || waveManager.currentWave === 16 || waveManager.currentWave === 24);
           if (!isBossWave && waveManager.enemiesDestroyed >= waveManager.enemiesTotal) {
             triggerWaveClear();
@@ -3012,7 +3024,7 @@
       weaponKitsDropped = 0;     // Reset kit counter on new game
       shieldDroppedThisWave = false;
       player.reset();
-      waveManager.startWave(4); // Start at Wave 4 for testing superpower spawn
+      waveManager.startWave(24); // Start at Wave 24 temporarily for testing victory screen trigger
       gameState = 'PLAYING';
     }
 
@@ -3392,10 +3404,13 @@
       audioEngine.playWaveClear();
       if (waveManager.currentWave >= 24) {
         gameState = 'VICTORY';
+        scoreSaved = false;
         if (score > highscore) {
           highscore = score;
           localStorage.setItem('intergalactic_neon_highscore', highscore.toString());
         }
+        saveScore(playerName, score, 24);
+        loadLeaderboard();
       } else {
         waveManager.startWave(waveManager.currentWave + 1);
       }
@@ -3647,10 +3662,15 @@
         }
       }
 
-      // 4. Wave Completion Failsafe (normal waves only)
+      // 4. Wave Completion Failsafe (with boss wave protection)
       if (gameState === 'PLAYING' && waveManager.state === 'PLAYING') {
         const isBossWave = (waveManager.currentWave === 8 || waveManager.currentWave === 16 || waveManager.currentWave === 24);
-        if (!isBossWave) {
+        if (isBossWave) {
+          const bossAlive = enemies.some(e => e.active && e.type.startsWith('BOSS'));
+          if (!bossAlive) {
+            triggerWaveClear();
+          }
+        } else {
           if (waveManager.spawnQueue.length === 0) {
             const activeWaveEnemies = enemies.filter(e => !e.isLeftover && !e.type.startsWith('BOSS'));
             if (activeWaveEnemies.length === 0) {
@@ -4308,6 +4328,18 @@
         input.style.boxShadow = '';
       });
     })();
+
+    document.addEventListener('visibilitychange', () => {
+      if (audioEngine && audioEngine.ctx) {
+        if (document.hidden) {
+          audioEngine.ctx.suspend();
+        } else {
+          if (audioEngine.initialized) {
+            audioEngine.ctx.resume();
+          }
+        }
+      }
+    });
   </script>
 </body>
 </html>
