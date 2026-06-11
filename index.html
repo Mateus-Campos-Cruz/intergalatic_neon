@@ -3666,9 +3666,11 @@
       if (gameState === 'PLAYING' && waveManager.state === 'PLAYING') {
         const isBossWave = (waveManager.currentWave === 8 || waveManager.currentWave === 16 || waveManager.currentWave === 24);
         if (isBossWave) {
-          const bossAlive = enemies.some(e => e.active && e.type.startsWith('BOSS'));
-          if (!bossAlive) {
-            triggerWaveClear();
+          if (waveManager.spawnQueue.length === 0) {
+            const bossAlive = enemies.some(e => e.active && e.type.startsWith('BOSS'));
+            if (!bossAlive) {
+              triggerWaveClear();
+            }
           }
         } else {
           if (waveManager.spawnQueue.length === 0) {
