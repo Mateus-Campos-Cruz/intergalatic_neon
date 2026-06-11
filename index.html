@@ -3176,7 +3176,9 @@
       ctx.shadowColor = '#00ffff';
       ctx.shadowBlur = 15;
       ctx.fillText(text, x, y);
-      
+      ctx.restore();
+    }
+
     function drawSuperpowerButton(ctx, btn, x, y, radius) {
       btn.x = x - radius;
       btn.y = y - radius;
